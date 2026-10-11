@@ -2,15 +2,87 @@
 
 {% block title %}Profile · RecipeLab{% endblock %}
 
+{% macro suggestion_controls(suggestion, status) %}
+  {% if status == 'applied' %}
+    {% set delete_message = 'Delete this applied suggestion and remove its preference from your active profile?' %}
+  {% else %}
+    {% set delete_message = 'Permanently delete this suggestion? This cannot be undone.' %}
+  {% endif %}
+  <div class="d-flex flex-column gap-2 align-items-start">
+    <form method="post" action="{{ url_for('web.edit_profile_suggestion', suggestion_id=suggestion['_id']) }}" class="d-flex flex-wrap gap-2 align-items-center">
+      <select class="form-select form-select-sm" name="suggestion_action" aria-label="Preference type">
+        <option value="add_like" {% if suggestion.get('action') == 'add_like' %}selected{% endif %}>Like</option>
+        <option value="add_dislike" {% if suggestion.get('action') == 'add_dislike' %}selected{% endif %}>Dislike</option>
+      </select>
+      <input class="form-control form-control-sm" name="token" value="{{ suggestion.get('token', '') }}" aria-label="Preference phrase" required />
+      <button class="btn btn-sm btn-outline-primary" type="submit">Save Edit</button>
+    </form>
+    <div class="action-row mobile-stack">
+      {% if status == 'pending' %}
+        <form method="post" action="{{ url_for('web.apply_profile_suggestion', suggestion_id=suggestion['_id']) }}">
+          <button class="btn btn-sm btn-success" type="submit">Accept</button>
+        </form>
+        <form method="post" action="{{ url_for('web.reject_profile_suggestion', suggestion_id=suggestion['_id']) }}">
+          <button class="btn btn-sm btn-outline-secondary" type="submit">Reject</button>
+        </form>
+      {% elif status == 'applied' %}
+        <form method="post" action="{{ url_for('web.undo_profile_suggestion', suggestion_id=suggestion['_id']) }}" onsubmit="return confirm('Undo this applied preference? It will be removed from future prompts.');">
+          <button class="btn btn-sm btn-outline-secondary" type="submit">Undo</button>
+        </form>
+      {% elif status in ['rejected', 'reverted'] %}
+        <form method="post" action="{{ url_for('web.reopen_profile_suggestion', suggestion_id=suggestion['_id']) }}">
+          <button class="btn btn-sm btn-outline-primary" type="submit">Reopen</button>
+        </form>
+      {% endif %}
+      <form method="post" action="{{ url_for('web.delete_profile_suggestion', suggestion_id=suggestion['_id']) }}" onsubmit="return confirm('{{ delete_message }}');">
+        <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+      </form>
+    </div>
+  </div>
+{% endmacro %}
+
+{% macro bulk_suggestion_controls(status) %}
+  {% if status == 'applied' %}
+    {% set delete_message = 'Permanently delete selected applied suggestions and remove their preferences from your active profile?' %}
+  {% else %}
+    {% set delete_message = 'Permanently delete all selected suggestions? This cannot be undone.' %}
+  {% endif %}
+  <div class="d-flex flex-wrap gap-2 align-items-center">
+    <form id="bulk-{{ status }}" method="post" action="{{ url_for('web.bulk_profile_suggestions') }}" class="d-flex flex-wrap gap-2">
+      {% if status == 'pending' %}
+        <button class="btn btn-sm btn-success" name="bulk_action" value="accept" type="submit" onclick="return confirm('Accept all selected suggestions and update your active profile?');">Accept selected</button>
+        <button class="btn btn-sm btn-outline-secondary" name="bulk_action" value="reject" type="submit" onclick="return confirm('Reject all selected suggestions? They will be suppressed from future suggestions until reopened.');">Reject selected</button>
+      {% elif status == 'applied' %}
+        <button class="btn btn-sm btn-outline-secondary" name="bulk_action" value="reject" type="submit" onclick="return confirm('Reject selected applied suggestions and remove their preferences from the active profile?');">Reject selected</button>
+        <button class="btn btn-sm btn-outline-secondary" name="bulk_action" value="undo" type="submit" onclick="return confirm('Undo selected preferences and remove them from future prompts?');">Undo selected</button>
+      {% elif status in ['rejected', 'reverted'] %}
+        <button class="btn btn-sm btn-success" name="bulk_action" value="accept" type="submit" onclick="return confirm('Accept all selected suggestions and update your active profile?');">Accept selected</button>
+        <button class="btn btn-sm btn-outline-primary" name="bulk_action" value="reopen" type="submit">Reopen selected</button>
+      {% endif %}
+      <button class="btn btn-sm btn-outline-danger" name="bulk_action" value="delete" type="submit" onclick="return confirm('{{ delete_message }}');">Delete selected</button>
+    </form>
+    <label class="form-check-label small text-nowrap">
+      <input class="form-check-input" type="checkbox" data-select-form="bulk-{{ status }}" aria-label="Select all {{ status }} suggestions" />
+      Select all shown
+    </label>
+  </div>
+{% endmacro %}
+
 {% block content %}
   <div class="card border-0 shadow-sm mb-4">
     <div class="card-body p-4">
       <div class="page-header mb-3">
         <h1 class="h3 mb-0 text-wrap-anywhere">Tasting Profile</h1>
-        <form method="post" action="{{ url_for('web.profile_page') }}" class="action-row mobile-stack">
-          <input type="hidden" name="action" value="refresh_suggestions" />
-          <button class="btn btn-outline-primary" type="submit">Generate Update Suggestions</button>
-        </form>
+        <div class="action-row mobile-stack">
+          <form method="post" action="{{ url_for('web.profile_page') }}">
+            <input type="hidden" name="action" value="clear_pending_suggestions" />
+            <button class="btn btn-outline-danger" type="submit" onclick="return confirm('Clear all pending profile suggestions? This will not change your profile or feedback.');">Clear Pending Suggestions</button>
+          </form>
+          <form method="post" action="{{ url_for('web.profile_page') }}">
+            <input type="hidden" name="action" value="refresh_suggestions" />
+            <button class="btn btn-outline-primary" type="submit">Generate Update Suggestions</button>
+          </form>
+        </div>
       </div>
 
       <form method="post" action="{{ url_for('web.profile_page') }}" class="row g-3">
@@ -52,23 +124,20 @@
     <div class="card-body p-4">
       <h2 class="h4">Pending Profile Update Suggestions</h2>
       {% if pending_updates %}
+        <div class="mb-3">{{ bulk_suggestion_controls('pending') }}</div>
         <div class="list-group">
           {% for suggestion in pending_updates %}
             <div class="list-group-item">
               <div class="d-flex flex-column flex-md-row justify-content-between gap-2 align-items-start">
+                <label class="form-check-label pt-1">
+                  <input class="form-check-input" type="checkbox" name="suggestion_ids" value="{{ suggestion['_id'] }}" form="bulk-pending" aria-label="Select {{ suggestion.get('token') }} pending suggestion" />
+                </label>
                 <div class="text-wrap-anywhere">
-                  <strong>{{ suggestion.get('action') }}</strong>:
+                  <strong>{{ suggestion.get('action', '').replace('add_', '')|title }}</strong>:
                   <span class="text-primary">{{ suggestion.get('token') }}</span>
                   <small class="text-muted d-block">Support: {{ suggestion.get('support_count', 0) }} · {{ suggestion.get('notes', '') }}</small>
                 </div>
-                <div class="action-row mobile-stack flex-shrink-0">
-                  <form method="post" action="{{ url_for('web.apply_profile_suggestion', suggestion_id=suggestion['_id']) }}">
-                    <button class="btn btn-sm btn-success" type="submit">Apply</button>
-                  </form>
-                  <form method="post" action="{{ url_for('web.reject_profile_suggestion', suggestion_id=suggestion['_id']) }}">
-                    <button class="btn btn-sm btn-outline-danger" type="submit">Reject</button>
-                  </form>
-                </div>
+                {{ suggestion_controls(suggestion, 'pending') }}
               </div>
             </div>
           {% endfor %}
@@ -85,15 +154,22 @@
         <div class="card-body p-4">
           <h2 class="h5">Applied Suggestions</h2>
           {% if applied_updates %}
-            <ul class="mb-0">
+            <div class="mb-3">{{ bulk_suggestion_controls('applied') }}</div>
+            <div class="list-group">
               {% for suggestion in applied_updates %}
-                <li class="text-wrap-anywhere">
-                  <strong>{{ suggestion.get('action') }}</strong>:
-                  {{ suggestion.get('token') }}
-                  <span class="text-muted">(support: {{ suggestion.get('support_count', 0) }}, updated: {{ suggestion.get('updated_at') }})</span>
-                </li>
+                <div class="list-group-item d-flex flex-column flex-xl-row justify-content-between gap-3 align-items-start">
+                  <label class="form-check-label pt-1">
+                    <input class="form-check-input" type="checkbox" name="suggestion_ids" value="{{ suggestion['_id'] }}" form="bulk-applied" aria-label="Select {{ suggestion.get('token') }} applied suggestion" />
+                  </label>
+                  <div class="text-wrap-anywhere">
+                    <strong>{{ suggestion.get('action', '').replace('add_', '')|title }}</strong>:
+                    {{ suggestion.get('token') }}
+                    <small class="text-muted d-block">Support: {{ suggestion.get('support_count', 0) }} · Updated: {{ suggestion.get('updated_at') }}</small>
+                  </div>
+                  {{ suggestion_controls(suggestion, 'applied') }}
+                </div>
               {% endfor %}
-            </ul>
+            </div>
           {% else %}
             <p class="text-muted mb-0">No applied suggestions yet.</p>
           {% endif %}
@@ -106,15 +182,22 @@
         <div class="card-body p-4">
           <h2 class="h5">Rejected Suggestions</h2>
           {% if rejected_updates %}
-            <ul class="mb-0">
+            <div class="mb-3">{{ bulk_suggestion_controls('rejected') }}</div>
+            <div class="list-group">
               {% for suggestion in rejected_updates %}
-                <li class="text-wrap-anywhere">
-                  <strong>{{ suggestion.get('action') }}</strong>:
-                  {{ suggestion.get('token') }}
-                  <span class="text-muted">(support: {{ suggestion.get('support_count', 0) }}, updated: {{ suggestion.get('updated_at') }})</span>
-                </li>
+                <div class="list-group-item d-flex flex-column flex-xl-row justify-content-between gap-3 align-items-start">
+                  <label class="form-check-label pt-1">
+                    <input class="form-check-input" type="checkbox" name="suggestion_ids" value="{{ suggestion['_id'] }}" form="bulk-rejected" aria-label="Select {{ suggestion.get('token') }} rejected suggestion" />
+                  </label>
+                  <div class="text-wrap-anywhere">
+                    <strong>{{ suggestion.get('action', '').replace('add_', '')|title }}</strong>:
+                    {{ suggestion.get('token') }}
+                    <small class="text-muted d-block">Support: {{ suggestion.get('support_count', 0) }} · Updated: {{ suggestion.get('updated_at') }}</small>
+                  </div>
+                  {{ suggestion_controls(suggestion, 'rejected') }}
+                </div>
               {% endfor %}
-            </ul>
+            </div>
           {% else %}
             <p class="text-muted mb-0">No rejected suggestions yet.</p>
           {% endif %}
@@ -122,4 +205,42 @@
       </div>
     </div>
   </div>
+
+  <div class="card border-0 shadow-sm mt-3">
+    <div class="card-body p-4">
+      <h2 class="h5">Undone Suggestions</h2>
+      {% if reverted_updates %}
+        <div class="mb-3">{{ bulk_suggestion_controls('reverted') }}</div>
+        <div class="list-group">
+          {% for suggestion in reverted_updates %}
+            <div class="list-group-item d-flex flex-column flex-xl-row justify-content-between gap-3 align-items-start">
+              <label class="form-check-label pt-1">
+                <input class="form-check-input" type="checkbox" name="suggestion_ids" value="{{ suggestion['_id'] }}" form="bulk-reverted" aria-label="Select {{ suggestion.get('token') }} undone suggestion" />
+              </label>
+              <div class="text-wrap-anywhere">
+                <strong>{{ suggestion.get('action', '').replace('add_', '')|title }}</strong>:
+                {{ suggestion.get('token') }}
+                <small class="text-muted d-block">Support: {{ suggestion.get('support_count', 0) }} · Updated: {{ suggestion.get('updated_at') }}</small>
+              </div>
+              {{ suggestion_controls(suggestion, 'reverted') }}
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-muted mb-0">No undone suggestions.</p>
+      {% endif %}
+    </div>
+  </div>
+  <script>
+    document.addEventListener("change", (event) => {
+      const selectAll = event.target.closest("[data-select-form]");
+      if (!selectAll) return;
+      const formId = selectAll.dataset.selectForm;
+      document
+        .querySelectorAll(`[form="${formId}"][name="suggestion_ids"]`)
+        .forEach((checkbox) => {
+          checkbox.checked = selectAll.checked;
+        });
+    });
+  </script>
 {% endblock %}

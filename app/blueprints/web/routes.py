@@ -24,15 +24,20 @@ from ...repositories import (
 from ...services import (
     MEAL_TYPES,
     apply_profile_update_suggestion,
+    bulk_manage_profile_update_suggestions,
     convert_raw_recipe_to_suggestion,
+    delete_profile_update_suggestion,
+    edit_profile_update_suggestion,
     get_allowed_models,
     get_effective_model,
     generate_profile_update_suggestions,
     generate_recipe_suggestion,
     normalize_recipe_document,
     pdf_filename_for_recipe,
+    reopen_profile_update_suggestion,
     reject_profile_update_suggestion,
     render_recipe_pdf,
+    undo_profile_update_suggestion,
 )
 
 
@@ -611,9 +616,18 @@ def profile_page() -> str:
             )
             return redirect(url_for("web.profile_page"))
 
-    pending_updates = updates_repo.list_pending(limit=200)
-    applied_updates = updates_repo.list_by_status("applied", limit=200)
-    rejected_updates = updates_repo.list_by_status("rejected", limit=200)
+        if action == "clear_pending_suggestions":
+            rejected_count = updates_repo.reject_all_pending()
+            flash(
+                f"Cleared {rejected_count} pending suggestion(s). Your profile and feedback were not changed.",
+                "info",
+            )
+            return redirect(url_for("web.profile_page"))
+
+    pending_updates = updates_repo.list_pending(limit=500)
+    applied_updates = updates_repo.list_by_status("applied", limit=500)
+    rejected_updates = updates_repo.list_by_status("rejected", limit=500)
+    reverted_updates = updates_repo.list_by_status("reverted", limit=500)
     active_profile = preferences_repo.get_active_profile() or active_profile
     return render_template(
         "profile.html",
@@ -621,6 +635,7 @@ def profile_page() -> str:
         pending_updates=pending_updates,
         applied_updates=applied_updates,
         rejected_updates=rejected_updates,
+        reverted_updates=reverted_updates,
     )
 
 
@@ -638,6 +653,69 @@ def reject_profile_suggestion(suggestion_id: str):
         "Suggestion rejected." if updated else "Suggestion not found.",
         "info" if updated else "warning",
     )
+    return redirect(url_for("web.profile_page"))
+
+
+@web_bp.post("/profile/suggestions/<suggestion_id>/edit")
+def edit_profile_suggestion(suggestion_id: str):
+    ok, message = edit_profile_update_suggestion(
+        get_mongo_db(),
+        suggestion_id,
+        action=str(request.form.get("suggestion_action", "")),
+        token=str(request.form.get("token", "")),
+    )
+    flash(message, "success" if ok else "warning")
+    return redirect(url_for("web.profile_page"))
+
+
+@web_bp.post("/profile/suggestions/bulk")
+def bulk_profile_suggestions():
+    suggestion_ids = request.form.getlist("suggestion_ids")
+    operation = str(request.form.get("bulk_action", "")).strip()
+    if not suggestion_ids:
+        flash("Select at least one suggestion first.", "warning")
+        return redirect(url_for("web.profile_page"))
+
+    if operation not in {"accept", "reject", "reopen", "undo", "delete"}:
+        flash("Choose a valid bulk action.", "warning")
+        return redirect(url_for("web.profile_page"))
+
+    results = bulk_manage_profile_update_suggestions(
+        get_mongo_db(), suggestion_ids, operation=operation
+    )
+    flash(
+        f"Bulk action complete: {results['updated']} updated, "
+        f"{results['deleted']} deleted, {results['skipped']} skipped.",
+        "info",
+    )
+    return redirect(url_for("web.profile_page"))
+
+
+@web_bp.post("/profile/suggestions/<suggestion_id>/undo")
+def undo_profile_suggestion(suggestion_id: str):
+    ok, message = undo_profile_update_suggestion(get_mongo_db(), suggestion_id)
+    flash(message, "info" if ok else "warning")
+    return redirect(url_for("web.profile_page"))
+
+
+@web_bp.post("/profile/suggestions/<suggestion_id>/reopen")
+def reopen_profile_suggestion(suggestion_id: str):
+    updated = reopen_profile_update_suggestion(get_mongo_db(), suggestion_id)
+    flash(
+        (
+            "Suggestion reopened as pending."
+            if updated
+            else "Suggestion cannot be reopened."
+        ),
+        "info" if updated else "warning",
+    )
+    return redirect(url_for("web.profile_page"))
+
+
+@web_bp.post("/profile/suggestions/<suggestion_id>/delete")
+def delete_profile_suggestion(suggestion_id: str):
+    ok, message = delete_profile_update_suggestion(get_mongo_db(), suggestion_id)
+    flash(message, "info" if ok else "warning")
     return redirect(url_for("web.profile_page"))
 
 

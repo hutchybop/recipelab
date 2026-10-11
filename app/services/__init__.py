@@ -8,8 +8,13 @@ from .llm_adapter import LLMAdapter, LLMAdapterError
 from .pdf_export_service import pdf_filename_for_recipe, render_recipe_pdf
 from .profile_refinement_service import (
     apply_profile_update_suggestion,
+    bulk_manage_profile_update_suggestions,
+    delete_profile_update_suggestion,
+    edit_profile_update_suggestion,
     generate_profile_update_suggestions,
+    reopen_profile_update_suggestion,
     reject_profile_update_suggestion,
+    undo_profile_update_suggestion,
 )
 from .prompt_composer import (
     DEFAULT_HARD_CONSTRAINTS,
@@ -41,9 +46,12 @@ __all__ = [
     "SUGGESTION_STATUSES",
     "TARGET_TYPES",
     "apply_profile_update_suggestion",
+    "bulk_manage_profile_update_suggestions",
     "compose_canonical_conversion_prompt",
     "compose_recipe_prompt",
     "convert_raw_recipe_to_suggestion",
+    "delete_profile_update_suggestion",
+    "edit_profile_update_suggestion",
     "generate_profile_update_suggestions",
     "generate_recipe_suggestion",
     "get_allowed_models",
@@ -57,5 +65,7 @@ __all__ = [
     "normalize_suggestion_document",
     "pdf_filename_for_recipe",
     "render_recipe_pdf",
+    "reopen_profile_update_suggestion",
     "reject_profile_update_suggestion",
+    "undo_profile_update_suggestion",
 ]

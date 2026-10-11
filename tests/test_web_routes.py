@@ -208,6 +208,174 @@ class WebRoutesTests(unittest.TestCase):
         self.assertIn(b"cilantro", response.data)
 
     @patch("app.blueprints.web.routes.get_mongo_db")
+    def test_profile_page_can_clear_pending_suggestions_without_changing_profile(
+        self, mock_db
+    ):
+        mock_db.return_value = self.fake_db
+        self.fake_db["preferences"].docs.append(
+            {
+                "_id": "p1",
+                "profile_name": "default",
+                "active": True,
+                "hard_avoids": [],
+                "likes": ["beans"],
+                "dislikes": ["mushrooms"],
+                "notes": "Keep it savory.",
+                "weights": {},
+            }
+        )
+        self.fake_db["profile_update_suggestions"].docs.extend(
+            [
+                {
+                    "_id": "u1",
+                    "action": "add_like",
+                    "token": "brown rice",
+                    "status": "pending",
+                },
+                {
+                    "_id": "u2",
+                    "action": "add_dislike",
+                    "token": "mushrooms",
+                    "status": "applied",
+                },
+            ]
+        )
+        self.fake_db["feedback_events"].docs.append(
+            {"_id": "f1", "target_type": "recipe", "target_id": "r1"}
+        )
+
+        response = self.client.post(
+            "/profile", data={"action": "clear_pending_suggestions"}
+        )
+
+        self.assertEqual(response.status_code, 302)
+        updates = self.fake_db["profile_update_suggestions"].docs
+        self.assertEqual(updates[0]["status"], "rejected")
+        self.assertEqual(updates[1]["status"], "applied")
+        self.assertEqual(self.fake_db["preferences"].docs[0]["likes"], ["beans"])
+        self.assertEqual(self.fake_db["preferences"].docs[0]["dislikes"], ["mushrooms"])
+        self.assertEqual(len(self.fake_db["feedback_events"].docs), 1)
+
+    @patch("app.blueprints.web.routes.get_mongo_db")
+    def test_profile_suggestion_history_controls_edit_reopen_and_delete(self, mock_db):
+        mock_db.return_value = self.fake_db
+        self.fake_db["preferences"].docs.append(
+            {
+                "_id": "p1",
+                "profile_name": "default",
+                "active": True,
+                "hard_avoids": [],
+                "likes": [],
+                "dislikes": [],
+                "notes": "",
+                "weights": {},
+            }
+        )
+        self.fake_db["profile_update_suggestions"].docs.extend(
+            [
+                {
+                    "_id": "u-pending",
+                    "action": "add_like",
+                    "token": "brown rice",
+                    "support_count": 2,
+                    "status": "pending",
+                    "created_at": 3,
+                },
+                {
+                    "_id": "u-rejected",
+                    "action": "add_dislike",
+                    "token": "mushrooms",
+                    "support_count": 2,
+                    "status": "rejected",
+                    "updated_at": 2,
+                },
+            ]
+        )
+
+        page = self.client.get("/profile")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"Save Edit", page.data)
+        self.assertIn(b"Accept", page.data)
+        self.assertIn(b"Reopen", page.data)
+        self.assertIn(b"Delete", page.data)
+
+        edited = self.client.post(
+            "/profile/suggestions/u-pending/edit",
+            data={"suggestion_action": "add_dislike", "token": "red onion"},
+        )
+        self.assertEqual(edited.status_code, 302)
+        pending = self.fake_db["profile_update_suggestions"].docs[0]
+        self.assertEqual(
+            (pending["action"], pending["token"]), ("add_dislike", "red onion")
+        )
+
+        reopened = self.client.post("/profile/suggestions/u-rejected/reopen")
+        self.assertEqual(reopened.status_code, 302)
+        self.assertEqual(
+            self.fake_db["profile_update_suggestions"].docs[1]["status"], "pending"
+        )
+
+        deleted = self.client.post("/profile/suggestions/u-pending/delete")
+        self.assertEqual(deleted.status_code, 302)
+        self.assertEqual(
+            [item["_id"] for item in self.fake_db["profile_update_suggestions"].docs],
+            ["u-rejected"],
+        )
+
+    @patch("app.blueprints.web.routes.get_mongo_db")
+    def test_profile_bulk_action_accepts_multiple_selected_suggestions(self, mock_db):
+        mock_db.return_value = self.fake_db
+        self.fake_db["preferences"].docs.append(
+            {
+                "_id": "p1",
+                "profile_name": "default",
+                "active": True,
+                "hard_avoids": [],
+                "likes": [],
+                "dislikes": [],
+                "notes": "",
+                "weights": {},
+            }
+        )
+        self.fake_db["profile_update_suggestions"].docs.extend(
+            [
+                {
+                    "_id": "u1",
+                    "action": "add_like",
+                    "token": "brown rice",
+                    "status": "pending",
+                    "created_at": 2,
+                },
+                {
+                    "_id": "u2",
+                    "action": "add_dislike",
+                    "token": "mushrooms",
+                    "status": "pending",
+                    "created_at": 1,
+                },
+            ]
+        )
+
+        response = self.client.post(
+            "/profile/suggestions/bulk",
+            data={
+                "suggestion_ids": ["u1", "u2"],
+                "bulk_action": "accept",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            [
+                item["status"]
+                for item in self.fake_db["profile_update_suggestions"].docs
+            ],
+            ["applied", "applied"],
+        )
+        self.assertEqual(self.fake_db["preferences"].docs[0]["likes"], ["brown rice"])
+        self.assertEqual(self.fake_db["preferences"].docs[0]["dislikes"], ["mushrooms"])
+
+    @patch("app.blueprints.web.routes.get_mongo_db")
     def test_recipe_detail_shows_feedback_state_and_history(self, mock_db):
         mock_db.return_value = self.fake_db
         self.fake_db["recipes"].docs.append(
@@ -256,9 +424,24 @@ class WebRoutesTests(unittest.TestCase):
         mock_db.return_value = self.fake_db
         self.fake_db["recipes"].docs.extend(
             [
-                {"_id": "r-liked", "title": "Liked Recipe", "meal_type": "main"},
-                {"_id": "r-disliked", "title": "Disliked Recipe", "meal_type": "main"},
-                {"_id": "r-note", "title": "Noted Recipe", "meal_type": "main"},
+                {
+                    "_id": "r-liked",
+                    "title": "Liked Recipe",
+                    "meal_type": "main",
+                    "created_at": 3,
+                },
+                {
+                    "_id": "r-disliked",
+                    "title": "Disliked Recipe",
+                    "meal_type": "main",
+                    "created_at": 2,
+                },
+                {
+                    "_id": "r-note",
+                    "title": "Noted Recipe",
+                    "meal_type": "main",
+                    "created_at": 1,
+                },
             ]
         )
         self.fake_db["feedback_events"].docs.extend(

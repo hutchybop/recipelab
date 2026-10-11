@@ -67,3 +67,35 @@ class ProfileUpdateSuggestionsRepository:
             {"$set": {"status": status, "updated_at": utc_now()}},
         )
         return result.modified_count > 0
+
+    def update_suggestion(
+        self,
+        suggestion_id: Any,
+        *,
+        action: str,
+        token: str,
+        status: str,
+    ) -> bool:
+        result = self.collection.update_one(
+            {"_id": to_object_id(suggestion_id)},
+            {
+                "$set": {
+                    "action": action,
+                    "token": token,
+                    "status": status,
+                    "updated_at": utc_now(),
+                }
+            },
+        )
+        return result.modified_count > 0
+
+    def delete_by_id(self, suggestion_id: Any) -> bool:
+        result = self.collection.delete_many({"_id": to_object_id(suggestion_id)})
+        return result.deleted_count > 0
+
+    def reject_all_pending(self) -> int:
+        result = self.collection.update_many(
+            {"status": "pending"},
+            {"$set": {"status": "rejected", "updated_at": utc_now()}},
+        )
+        return int(result.modified_count)

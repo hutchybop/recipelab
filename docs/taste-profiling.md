@@ -63,12 +63,17 @@ This stage uses **support count** (frequency) per preference phrase:
 - For each liked/disliked event, each distinct candidate phrase in that recipe counts once.
 - Only phrases with `support_count >= min_support` are suggested (`min_support` default is `2`).
 - Generating suggestions again replaces pending items that are no longer supported, so stale suggestions from older extraction logic are cleared from the pending list.
+- Rejected and undone phrases are not suggested again unless reopened. Deleting a suggestion removes that suppression record, so supported feedback may produce it again later.
 - Existing likes/dislikes/hard_avoids are excluded from new suggestions.
 
 Then you decide:
 
-- **Apply** -> writes token into active `likes` or `dislikes` profile.
-- **Reject** -> no profile change.
+- **Accept** -> writes the phrase into active `likes` or `dislikes` profile.
+- **Edit an applied suggestion** -> changes its phrase/direction and updates the active profile immediately.
+- **Undo an applied suggestion** -> removes its phrase from the active profile and moves it to undone history.
+- **Reject** -> no profile change; the phrase can be edited or reopened later.
+- **Delete** -> permanently removes the suggestion record. Deleting an applied item also removes its associated active preference.
+- These actions are also available in bulk for selected suggestions in each status section.
 
 So feedback has **no direct immediate prompt impact** until the suggestion is applied.
 

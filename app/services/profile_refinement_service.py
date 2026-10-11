@@ -155,6 +155,15 @@ def generate_profile_update_suggestions(
     hard_avoids = {
         _normalize_phrase(item) for item in active_profile.get("hard_avoids", [])
     }
+    suppressed_suggestions = set()
+    for status in ("rejected", "reverted"):
+        suppressed_suggestions.update(
+            (
+                item.get("action"),
+                _normalize_phrase(item.get("token", "")),
+            )
+            for item in profile_updates_repo.list_by_status(status, limit=1000)
+        )
 
     candidates: dict[tuple[str, str], int] = {}
     for token, count in liked_counts.items():
@@ -162,14 +171,18 @@ def generate_profile_update_suggestions(
             continue
         if token in likes or token in dislikes or token in hard_avoids:
             continue
-        candidates[("add_like", token)] = count
+        key = ("add_like", token)
+        if key not in suppressed_suggestions:
+            candidates[key] = count
 
     for token, count in disliked_counts.items():
         if count < min_support:
             continue
         if token in dislikes or token in likes or token in hard_avoids:
             continue
-        candidates[("add_dislike", token)] = count
+        key = ("add_dislike", token)
+        if key not in suppressed_suggestions:
+            candidates[key] = count
 
     existing_pending = set()
     for item in profile_updates_repo.list_pending(limit=500):
@@ -227,43 +240,21 @@ def apply_profile_update_suggestion(
     }
     token = _normalize_phrase(suggestion.get("token", ""))
     action = suggestion.get("action")
-
-    likes = [
-        str(item).strip() for item in profile.get("likes", []) if str(item).strip()
-    ]
-    dislikes = [
-        str(item).strip() for item in profile.get("dislikes", []) if str(item).strip()
-    ]
-    hard_avoids = [
-        str(item).strip()
-        for item in profile.get("hard_avoids", [])
-        if str(item).strip()
-    ]
-
-    if (
-        action == "add_like"
-        and token
-        and token not in {_normalize_phrase(item) for item in likes}
-    ):
-        likes.append(token)
-        dislikes = [item for item in dislikes if _normalize_phrase(item) != token]
-    elif (
-        action == "add_dislike"
-        and token
-        and token not in {_normalize_phrase(item) for item in hard_avoids}
-    ):
-        dislikes.append(token)
-        likes = [item for item in likes if _normalize_phrase(item) != token]
-    else:
+    hard_avoids = {_normalize_phrase(item) for item in profile.get("hard_avoids", [])}
+    if action not in {"add_like", "add_dislike"} or not token:
         return False, "No applicable change"
+    if token in hard_avoids:
+        return False, "A hard avoid cannot also be a profile like or dislike"
+
+    _add_preference(profile, action, token)
 
     preferences_repo.upsert_profile(
         {
             "profile_name": profile.get("profile_name", "default"),
             "active": True,
-            "hard_avoids": hard_avoids,
-            "likes": likes,
-            "dislikes": dislikes,
+            "hard_avoids": profile.get("hard_avoids", []),
+            "likes": profile.get("likes", []),
+            "dislikes": profile.get("dislikes", []),
             "notes": profile.get("notes", ""),
             "weights": profile.get("weights", {}),
         }
@@ -273,9 +264,180 @@ def apply_profile_update_suggestion(
 
 
 def reject_profile_update_suggestion(db: Database, suggestion_id: str) -> bool:
-    return ProfileUpdateSuggestionsRepository(db).update_status(
-        suggestion_id, "rejected"
+    repository = ProfileUpdateSuggestionsRepository(db)
+    suggestion = repository.get_by_id(suggestion_id)
+    if not suggestion or suggestion.get("status") != "pending":
+        return False
+    return repository.update_status(suggestion_id, "rejected")
+
+
+def edit_profile_update_suggestion(
+    db: Database, suggestion_id: str, *, action: str, token: str
+) -> tuple[bool, str]:
+    repository = ProfileUpdateSuggestionsRepository(db)
+    suggestion = repository.get_by_id(suggestion_id)
+    if not suggestion:
+        return False, "Suggestion not found"
+
+    action = str(action).strip()
+    token = _normalize_phrase(token)
+    if action not in {"add_like", "add_dislike"} or not token:
+        return False, "Enter a preference and choose like or dislike"
+
+    status = str(suggestion.get("status", ""))
+    old_action = suggestion.get("action")
+    old_token = _normalize_phrase(suggestion.get("token", ""))
+    if status == "applied":
+        preferences_repo = PreferencesRepository(db)
+        profile = _get_active_profile(preferences_repo)
+        hard_avoids = {
+            _normalize_phrase(item) for item in profile.get("hard_avoids", [])
+        }
+        if token in hard_avoids:
+            return False, "A hard avoid cannot also be a profile like or dislike"
+        _remove_preference(profile, old_action, old_token)
+        _add_preference(profile, action, token)
+        preferences_repo.upsert_profile(profile)
+    elif status not in {"pending", "rejected", "reverted"}:
+        return False, "Suggestion cannot be edited in its current state"
+
+    updated = repository.update_suggestion(
+        suggestion_id, action=action, token=token, status=status
     )
+    if not updated:
+        return False, "Suggestion was not changed"
+    return True, "Suggestion updated"
+
+
+def undo_profile_update_suggestion(
+    db: Database, suggestion_id: str
+) -> tuple[bool, str]:
+    repository = ProfileUpdateSuggestionsRepository(db)
+    suggestion = repository.get_by_id(suggestion_id)
+    if not suggestion:
+        return False, "Suggestion not found"
+    if suggestion.get("status") != "applied":
+        return False, "Only applied suggestions can be undone"
+
+    preferences_repo = PreferencesRepository(db)
+    profile = _get_active_profile(preferences_repo)
+    _remove_preference(
+        profile,
+        suggestion.get("action"),
+        _normalize_phrase(suggestion.get("token", "")),
+    )
+    preferences_repo.upsert_profile(profile)
+    repository.update_status(suggestion_id, "reverted")
+    return True, "Suggestion undone and removed from the active profile"
+
+
+def reopen_profile_update_suggestion(db: Database, suggestion_id: str) -> bool:
+    repository = ProfileUpdateSuggestionsRepository(db)
+    suggestion = repository.get_by_id(suggestion_id)
+    if not suggestion or suggestion.get("status") not in {"rejected", "reverted"}:
+        return False
+    return repository.update_status(suggestion_id, "pending")
+
+
+def delete_profile_update_suggestion(
+    db: Database, suggestion_id: str
+) -> tuple[bool, str]:
+    repository = ProfileUpdateSuggestionsRepository(db)
+    suggestion = repository.get_by_id(suggestion_id)
+    if not suggestion:
+        return False, "Suggestion not found"
+
+    if suggestion.get("status") == "applied":
+        preferences_repo = PreferencesRepository(db)
+        profile = _get_active_profile(preferences_repo)
+        _remove_preference(
+            profile,
+            suggestion.get("action"),
+            _normalize_phrase(suggestion.get("token", "")),
+        )
+        preferences_repo.upsert_profile(profile)
+
+    if not repository.delete_by_id(suggestion_id):
+        return False, "Suggestion not found"
+    return True, "Suggestion permanently deleted"
+
+
+def bulk_manage_profile_update_suggestions(
+    db: Database, suggestion_ids: list[str], *, operation: str
+) -> dict[str, int]:
+    results = {"updated": 0, "deleted": 0, "skipped": 0}
+    repository = ProfileUpdateSuggestionsRepository(db)
+
+    for suggestion_id in dict.fromkeys(suggestion_ids):
+        suggestion = repository.get_by_id(suggestion_id)
+        if not suggestion:
+            results["skipped"] += 1
+            continue
+
+        status = suggestion.get("status")
+        changed = False
+        if operation == "accept":
+            if status in {"rejected", "reverted"}:
+                repository.update_status(suggestion_id, "pending")
+                changed, _ = apply_profile_update_suggestion(db, suggestion_id)
+                if not changed:
+                    repository.update_status(suggestion_id, status)
+            elif status == "pending":
+                changed, _ = apply_profile_update_suggestion(db, suggestion_id)
+        elif operation == "reject":
+            if status == "pending":
+                changed = reject_profile_update_suggestion(db, suggestion_id)
+            elif status == "applied":
+                changed, _ = undo_profile_update_suggestion(db, suggestion_id)
+                if changed:
+                    repository.update_status(suggestion_id, "rejected")
+        elif operation == "reopen":
+            changed = reopen_profile_update_suggestion(db, suggestion_id)
+        elif operation == "undo":
+            changed, _ = undo_profile_update_suggestion(db, suggestion_id)
+        elif operation == "delete":
+            changed, _ = delete_profile_update_suggestion(db, suggestion_id)
+            if changed:
+                results["deleted"] += 1
+                continue
+
+        if changed:
+            results["updated"] += 1
+        else:
+            results["skipped"] += 1
+
+    return results
+
+
+def _get_active_profile(preferences_repo: PreferencesRepository) -> dict[str, Any]:
+    return preferences_repo.get_active_profile() or {
+        "profile_name": "default",
+        "active": True,
+        "hard_avoids": [],
+        "likes": [],
+        "dislikes": [],
+        "notes": "",
+        "weights": {},
+    }
+
+
+def _remove_preference(profile: dict[str, Any], action: Any, token: str) -> None:
+    field = "likes" if action == "add_like" else "dislikes"
+    profile[field] = [
+        item for item in profile.get(field, []) if _normalize_phrase(item) != token
+    ]
+
+
+def _add_preference(profile: dict[str, Any], action: str, token: str) -> None:
+    target_field = "likes" if action == "add_like" else "dislikes"
+    other_field = "dislikes" if target_field == "likes" else "likes"
+    profile[other_field] = [
+        item
+        for item in profile.get(other_field, [])
+        if _normalize_phrase(item) != token
+    ]
+    if token not in {_normalize_phrase(item) for item in profile.get(target_field, [])}:
+        profile.setdefault(target_field, []).append(token)
 
 
 def _resolve_target_recipe(
