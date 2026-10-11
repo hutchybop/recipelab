@@ -1,3 +1,18 @@
+## Session 19
+### Sunday October 11th
+<br>
+
+**Summary:** This session unified recipe and suggestion tag editing around a normalized library-wide selector, and constrained imported recipe conversion to existing library tags. It also changed recipe deletion from soft-delete to permanent deletion, clarified numeric rating/difficulty fields, and added repository, conversion, prompt, and route regression coverage.
+
+**Git Branch:** main <br>
+**Git commits:** <br>
+4b69631
+
+**Session git history:**
+- update tagging logic, update to hard-delete 20261011-2019 - *Added a normalized library-wide tag selector, restricted imported recipes to existing tags, switched recipe deletion to permanent deletion, and expanded related test coverage.*
+---
+<br>
+
 ## Session 18
 ### Sunday October 11th
 <br>
