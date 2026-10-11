@@ -60,7 +60,20 @@ def compose_recipe_prompt(
     )
 
 
-def compose_canonical_conversion_prompt(*, meal_type: str, raw_recipe_text: str) -> str:
+def compose_canonical_conversion_prompt(
+    *, meal_type: str, raw_recipe_text: str, allowed_tags: list[str] | None = None
+) -> str:
+    normalized_allowed_tags = [
+        item.strip()
+        for item in (allowed_tags or [])
+        if isinstance(item, str) and item.strip()
+    ]
+    allowed_tags_line = (
+        ", ".join(normalized_allowed_tags)
+        if normalized_allowed_tags
+        else "(none available)"
+    )
+
     return (
         "Convert the raw recipe text into exactly one canonical recipe JSON object. "
         "Return valid JSON only. No markdown or extra prose.\n\n"
@@ -70,6 +83,10 @@ def compose_canonical_conversion_prompt(*, meal_type: str, raw_recipe_text: str)
         "- Keep missing values as empty strings or empty lists.\n"
         "- Normalize ingredients to objects with quantity, unit, ingredient.\n"
         "- Convert preparation headings into a simple method step list.\n\n"
+        "Tag rules (strict):\n"
+        f"- Allowed tags (existing library only): {allowed_tags_line}\n"
+        "- Output tags must be selected only from the allowed list above.\n"
+        "- If none fit, return an empty tags list.\n\n"
         "Output JSON schema:\n"
         "{\n"
         '  "title": "string",\n'

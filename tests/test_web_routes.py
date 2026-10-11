@@ -772,6 +772,79 @@ class WebRoutesTests(unittest.TestCase):
         )
 
     @patch("app.blueprints.web.routes.get_mongo_db")
+    def test_edit_suggestion_merges_selected_and_new_tags(self, mock_db):
+        mock_db.return_value = self.fake_db
+        self.fake_db["recipes"].docs.append(
+            {
+                "_id": "r1",
+                "title": "Tag Source",
+                "meal_type": "main",
+                "source_type": "user",
+                "ingredients": [{"quantity": "1", "unit": "cup", "ingredient": "rice"}],
+                "method": ["Cook"],
+                "notes": [],
+                "metadata": {"tags": ["quick", "batch"]},
+                "deleted_at": None,
+            }
+        )
+        self.fake_db["suggestions"].docs.append(
+            {
+                "_id": "s-edit",
+                "title": "Draft Suggestion",
+                "meal_type": "main",
+                "status": "draft_invalid",
+                "recipe": {
+                    "title": "Draft Suggestion",
+                    "meal_type": "main",
+                    "source_type": "user",
+                    "metadata": {
+                        "source": "",
+                        "servings": "",
+                        "prep_time": "",
+                        "cook_time": "",
+                        "rating": "",
+                        "difficulty": "",
+                        "tags": ["quick"],
+                    },
+                    "ingredients": [
+                        {"quantity": "1", "unit": "cup", "ingredient": "rice"}
+                    ],
+                    "method": ["Cook rice"],
+                    "notes": [],
+                },
+                "validation": {"valid": False, "errors": ["bad format"]},
+                "created_at": 1,
+            }
+        )
+
+        response = self.client.post(
+            "/suggestions/s-edit/edit",
+            data={
+                "title": "Edited Suggestion",
+                "meal_type": "main",
+                "source_type": "user",
+                "source": "",
+                "servings": "2",
+                "prep_time": "5",
+                "cook_time": "10",
+                "difficulty": "",
+                "rating": "",
+                "tags_selected": ["quick", "batch"],
+                "new_tags": "High-Protein",
+                "ingredients": "1 cup rice",
+                "method": "Cook rice",
+                "notes": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/suggestions/s-edit", response.location)
+        self.assertEqual(
+            self.fake_db["suggestions"].docs[0]["recipe"]["metadata"]["tags"],
+            ["quick", "batch", "high-protein"],
+        )
+
+    @patch("app.blueprints.web.routes.get_mongo_db")
     def test_edit_recipe_updates_title(self, mock_db):
         mock_db.return_value = self.fake_db
         self.fake_db["recipes"].docs.append(
@@ -820,6 +893,101 @@ class WebRoutesTests(unittest.TestCase):
         self.assertEqual(self.fake_db["recipes"].docs[0]["title"], "New Title")
 
     @patch("app.blueprints.web.routes.get_mongo_db")
+    def test_edit_recipe_page_shows_global_tags_in_selector(self, mock_db):
+        mock_db.return_value = self.fake_db
+        self.fake_db["recipes"].docs.extend(
+            [
+                {
+                    "_id": "r1",
+                    "title": "Recipe A",
+                    "meal_type": "main",
+                    "source_type": "user",
+                    "ingredients": [
+                        {"quantity": "1", "unit": "cup", "ingredient": "rice"}
+                    ],
+                    "method": ["Cook rice"],
+                    "notes": [],
+                    "metadata": {"tags": ["quick", "batch"]},
+                    "deleted_at": None,
+                },
+                {
+                    "_id": "r2",
+                    "title": "Recipe B",
+                    "meal_type": "main",
+                    "source_type": "user",
+                    "ingredients": [
+                        {"quantity": "1", "unit": "cup", "ingredient": "lentils"}
+                    ],
+                    "method": ["Simmer"],
+                    "notes": [],
+                    "metadata": {"tags": ["high-protein"]},
+                    "deleted_at": None,
+                },
+            ]
+        )
+
+        response = self.client.get("/recipes/r1/edit")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'name="tags_selected"', response.data)
+        self.assertIn(b'type="checkbox"', response.data)
+        self.assertIn(b">quick<", response.data)
+        self.assertIn(b">batch<", response.data)
+        self.assertIn(b">high-protein<", response.data)
+
+    @patch("app.blueprints.web.routes.get_mongo_db")
+    def test_edit_recipe_merges_selected_and_new_tags(self, mock_db):
+        mock_db.return_value = self.fake_db
+        self.fake_db["recipes"].docs.append(
+            {
+                "_id": "r1",
+                "title": "Old Title",
+                "meal_type": "main",
+                "source_type": "user",
+                "ingredients": [{"quantity": "1", "unit": "cup", "ingredient": "rice"}],
+                "method": ["Cook rice"],
+                "notes": [],
+                "metadata": {
+                    "source": "",
+                    "servings": "1",
+                    "prep_time": "5",
+                    "cook_time": "10",
+                    "rating": "",
+                    "difficulty": "",
+                    "tags": ["quick"],
+                },
+                "deleted_at": None,
+            }
+        )
+
+        response = self.client.post(
+            "/recipes/r1/edit",
+            data={
+                "title": "New Title",
+                "meal_type": "main",
+                "source_type": "user",
+                "source": "",
+                "servings": "1",
+                "prep_time": "5",
+                "cook_time": "10",
+                "difficulty": "",
+                "rating": "",
+                "tags_selected": ["quick", "batch"],
+                "new_tags": "High-Protein, quick",
+                "ingredients": "1 cup rice",
+                "method": "Cook rice",
+                "notes": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/recipes/r1", response.location)
+        self.assertEqual(
+            self.fake_db["recipes"].docs[0]["metadata"]["tags"],
+            ["quick", "batch", "high-protein"],
+        )
+
+    @patch("app.blueprints.web.routes.get_mongo_db")
     def test_export_recipe_pdf(self, mock_db):
         mock_db.return_value = self.fake_db
         self.fake_db["recipes"].docs.append(
@@ -849,7 +1017,7 @@ class WebRoutesTests(unittest.TestCase):
         self.assertTrue(response.data.startswith(b"%PDF-1.4"))
 
     @patch("app.blueprints.web.routes.get_mongo_db")
-    def test_delete_recipe_soft_deletes(self, mock_db):
+    def test_delete_recipe_hard_deletes(self, mock_db):
         mock_db.return_value = self.fake_db
         self.fake_db["recipes"].docs.append(
             {
@@ -876,7 +1044,7 @@ class WebRoutesTests(unittest.TestCase):
         response = self.client.post("/recipes/r2/delete")
         self.assertEqual(response.status_code, 302)
         self.assertIn("/recipes", response.location)
-        self.assertIsNotNone(self.fake_db["recipes"].docs[0]["deleted_at"])
+        self.assertEqual(self.fake_db["recipes"].docs, [])
 
 
 if __name__ == "__main__":

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import unittest
 
-from app.services.prompt_composer import compose_recipe_prompt
+from app.services.prompt_composer import (
+    compose_canonical_conversion_prompt,
+    compose_recipe_prompt,
+)
 
 
 class PromptComposerTests(unittest.TestCase):
@@ -23,6 +26,17 @@ class PromptComposerTests(unittest.TestCase):
         self.assertIn("lentils, coriander", prompt)
         self.assertIn("peanuts, sprouts", prompt)
         self.assertIn("Output JSON object schema", prompt)
+
+    def test_compose_canonical_conversion_prompt_contains_allowed_tag_rules(self):
+        prompt = compose_canonical_conversion_prompt(
+            meal_type="main",
+            raw_recipe_text="some raw recipe",
+            allowed_tags=["quick", "high-protein"],
+        )
+
+        self.assertIn("Tag rules (strict)", prompt)
+        self.assertIn("quick, high-protein", prompt)
+        self.assertIn("If none fit, return an empty tags list.", prompt)
 
 
 if __name__ == "__main__":

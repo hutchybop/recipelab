@@ -9,7 +9,6 @@ from pymongo.database import Database
 from ..services.schema_utils import (
     normalize_recipe_document,
     normalize_recipe_update,
-    utc_now,
 )
 from .common import to_object_id
 
@@ -69,6 +68,34 @@ class RecipesRepository:
         )
         return list(cursor)
 
+    def list_all_tags(
+        self, *, include_deleted: bool = False, limit: int = 5000
+    ) -> list[str]:
+        filters: dict[str, Any] = {}
+        if not include_deleted:
+            filters["deleted_at"] = None
+
+        cursor = self.collection.find(filters).limit(limit)
+        seen: set[str] = set()
+        tags: list[str] = []
+
+        for recipe in cursor:
+            metadata = recipe.get("metadata", {})
+            raw_tags = metadata.get("tags", []) if isinstance(metadata, Mapping) else []
+            if not isinstance(raw_tags, list):
+                continue
+
+            for tag in raw_tags:
+                if not isinstance(tag, str):
+                    continue
+                cleaned = tag.strip().lower()
+                if not cleaned or cleaned in seen:
+                    continue
+                seen.add(cleaned)
+                tags.append(cleaned)
+
+        return sorted(tags)
+
     def update(self, recipe_id: Any, update_fields: Mapping[str, Any]) -> bool:
         normalized_update = normalize_recipe_update(update_fields)
         result = self.collection.update_one(
@@ -77,12 +104,9 @@ class RecipesRepository:
         )
         return result.modified_count > 0
 
-    def soft_delete(self, recipe_id: Any) -> bool:
-        result = self.collection.update_one(
-            {"_id": to_object_id(recipe_id), "deleted_at": None},
-            {"$set": {"deleted_at": utc_now(), "updated_at": utc_now()}},
-        )
-        return result.modified_count > 0
+    def delete(self, recipe_id: Any) -> bool:
+        result = self.collection.delete_many({"_id": to_object_id(recipe_id)})
+        return result.deleted_count > 0
 
     def upsert_by_source_path(
         self, source_path: str, document: Mapping[str, Any]

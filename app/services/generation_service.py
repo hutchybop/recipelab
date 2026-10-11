@@ -9,6 +9,7 @@ from pymongo.database import Database
 from ..repositories import (
     GenerationRunsRepository,
     PreferencesRepository,
+    RecipesRepository,
     RuntimeSettingsRepository,
     SuggestionsRepository,
     ensure_all_indexes,
@@ -121,6 +122,8 @@ def convert_raw_recipe_to_suggestion(
 
     generation_runs_repository = GenerationRunsRepository(db)
     suggestions_repository = SuggestionsRepository(db)
+    recipes_repository = RecipesRepository(db)
+    existing_tags = recipes_repository.list_all_tags()
 
     model = _resolve_generation_model(db=db, model_override=model_override)
     provider = current_app.config.get("LLM_PROVIDER", "").strip()
@@ -135,7 +138,9 @@ def convert_raw_recipe_to_suggestion(
         }
 
     prompt = compose_canonical_conversion_prompt(
-        meal_type=meal_type, raw_recipe_text=raw_recipe_text
+        meal_type=meal_type,
+        raw_recipe_text=raw_recipe_text,
+        allowed_tags=existing_tags,
     )
 
     run = generation_runs_repository.create(
@@ -170,6 +175,7 @@ def convert_raw_recipe_to_suggestion(
         generation_run_id=str(run["_id"]),
         source_type="user",
         default_source="Imported raw recipe",
+        allowed_tags=existing_tags,
     )
 
     if suggestion["status"] == "draft":
@@ -204,6 +210,7 @@ def _persist_suggestion_from_raw_response(
     generation_run_id: str,
     source_type: str,
     default_source: str,
+    allowed_tags: list[str] | None = None,
 ) -> dict[str, Any]:
     validation_errors: list[str] = []
     parsed_recipe = _parse_recipe_json(raw_response, validation_errors)
@@ -230,7 +237,9 @@ def _persist_suggestion_from_raw_response(
                     "cook_time": parsed_recipe.get("cook_time", ""),
                     "rating": parsed_recipe.get("rating", ""),
                     "difficulty": parsed_recipe.get("difficulty", ""),
-                    "tags": parsed_recipe.get("tags", []),
+                    "tags": _filter_to_allowed_tags(
+                        parsed_recipe.get("tags", []), allowed_tags
+                    ),
                     "ingredients": parsed_recipe.get("ingredients", []),
                     "method": parsed_recipe.get("method", []),
                     "notes": parsed_recipe.get("notes", []),
@@ -282,6 +291,31 @@ def _parse_recipe_json(
         return None
 
     return payload
+
+
+def _filter_to_allowed_tags(raw_tags: Any, allowed_tags: list[str] | None) -> Any:
+    if allowed_tags is None:
+        return raw_tags
+
+    if not isinstance(raw_tags, list):
+        return []
+
+    allowed = {item.strip().lower() for item in allowed_tags if isinstance(item, str)}
+    if not allowed:
+        return []
+
+    filtered: list[str] = []
+    seen: set[str] = set()
+    for tag in raw_tags:
+        if not isinstance(tag, str):
+            continue
+        cleaned = tag.strip().lower()
+        if not cleaned or cleaned not in allowed or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        filtered.append(cleaned)
+
+    return filtered
 
 
 def get_allowed_models() -> list[str]:

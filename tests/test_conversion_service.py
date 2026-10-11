@@ -27,6 +27,19 @@ class ConversionServiceTests(unittest.TestCase):
 
     @patch("app.services.generation_service.LLMAdapter.generate_recipe")
     def test_convert_raw_recipe_success(self, mock_generate):
+        self.db["recipes"].docs.append(
+            {
+                "_id": "r1",
+                "title": "Tag source",
+                "meal_type": "main",
+                "source_type": "user",
+                "ingredients": [{"quantity": "1", "unit": "cup", "ingredient": "rice"}],
+                "method": ["Cook"],
+                "notes": [],
+                "metadata": {"tags": ["soup", "quick"]},
+                "deleted_at": None,
+            }
+        )
         mock_generate.return_value = json.dumps(
             {
                 "title": "Imported Chicken Soup",
@@ -37,7 +50,7 @@ class ConversionServiceTests(unittest.TestCase):
                 "cook_time": "20",
                 "rating": "",
                 "difficulty": "",
-                "tags": ["soup"],
+                "tags": ["soup", "invented-tag"],
                 "ingredients": [
                     {"quantity": "1", "unit": "cup", "ingredient": "stock"}
                 ],
@@ -58,6 +71,9 @@ class ConversionServiceTests(unittest.TestCase):
         self.assertEqual(len(self.db["suggestions"].docs), 1)
         self.assertEqual(
             self.db["suggestions"].docs[0]["recipe"]["source_type"], "user"
+        )
+        self.assertEqual(
+            self.db["suggestions"].docs[0]["recipe"]["metadata"]["tags"], ["soup"]
         )
 
     @patch("app.services.generation_service.LLMAdapter.generate_recipe")

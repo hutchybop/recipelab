@@ -35,9 +35,33 @@
           <label class="form-label" for="source">Source</label>
           <input class="form-control" id="source" name="source" value="{{ metadata.get('source', '') }}" />
         </div>
+        <div class="col-md-8">
+          <label class="form-label d-block">Tags</label>
+          <details class="dropdown">
+            <summary class="form-control text-start">Select one or more tags</summary>
+            <div class="border rounded-3 mt-2 p-2" style="max-height: 220px; overflow-y: auto;">
+              {% for tag in available_tags|default([]) %}
+                {% set checkbox_id = 'suggestion-tag-' ~ loop.index %}
+                <div class="form-check">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    id="{{ checkbox_id }}"
+                    name="tags_selected"
+                    value="{{ tag }}"
+                    {% if tag in selected_tags|default([]) %}checked{% endif %}
+                  />
+                  <label class="form-check-label" for="{{ checkbox_id }}">{{ tag }}</label>
+                </div>
+              {% endfor %}
+            </div>
+          </details>
+          <div class="form-text">Tick tags to keep them selected.</div>
+        </div>
         <div class="col-md-4">
-          <label class="form-label" for="tags">Tags (comma separated)</label>
-          <input class="form-control" id="tags" name="tags" value="{{ metadata.get('tags', [])|join(', ') }}" />
+          <label class="form-label" for="new_tags">Add New Tag(s)</label>
+          <input class="form-control" id="new_tags" name="new_tags" placeholder="comma separated (e.g. high-protein, quick)" />
+          <div class="form-text">New tags are saved with this suggestion.</div>
         </div>
 
         <div class="col-md-3">
@@ -53,13 +77,13 @@
           <input class="form-control" id="cook_time" name="cook_time" value="{{ metadata.get('cook_time', '') }}" />
         </div>
         <div class="col-md-3">
-          <label class="form-label" for="difficulty">Difficulty</label>
-          <input class="form-control" id="difficulty" name="difficulty" value="{{ metadata.get('difficulty', '') }}" />
+          <label class="form-label" for="difficulty">Difficulty (1-Easy, 10-Hard)</label>
+          <input type="number" class="form-control" id="difficulty" name="difficulty" value="{{ metadata.get('difficulty', '') }}" />
         </div>
 
         <div class="col-md-3">
-          <label class="form-label" for="rating">Rating</label>
-          <input class="form-control" id="rating" name="rating" value="{{ metadata.get('rating', '') }}" />
+          <label class="form-label" for="rating">Rating (1-Low, 10-High)</label>
+          <input type="number" class="form-control" id="rating" name="rating" value="{{ metadata.get('rating', '') }}" />
         </div>
 
         <div class="col-12">

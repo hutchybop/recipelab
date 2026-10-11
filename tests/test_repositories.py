@@ -35,6 +35,34 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(len(recipes), 1)
         self.assertEqual(recipes[0]["title"], "Chicken Pilaf")
 
+    def test_recipes_repository_lists_unique_normalized_tags(self):
+        repository = RecipesRepository(self.db)
+
+        repository.create(
+            {
+                "title": "Tagged One",
+                "meal_type": "main",
+                "ingredients": ["1 cup rice"],
+                "method": ["Cook"],
+                "source_type": "user",
+                "tags": ["Quick", "High-Protein"],
+            }
+        )
+        repository.create(
+            {
+                "title": "Tagged Two",
+                "meal_type": "main",
+                "ingredients": ["1 cup lentils"],
+                "method": ["Simmer"],
+                "source_type": "user",
+                "tags": ["quick", "Budget"],
+            }
+        )
+
+        self.assertEqual(
+            repository.list_all_tags(), ["budget", "high-protein", "quick"]
+        )
+
     def test_suggestions_repository_create_and_status_update(self):
         repository = SuggestionsRepository(self.db)
         suggestion = repository.create({"title": "New Dish", "meal_type": "main"})

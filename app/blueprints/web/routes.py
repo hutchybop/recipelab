@@ -176,7 +176,9 @@ def suggestion_detail(suggestion_id: str) -> str:
 
 @web_bp.route("/suggestions/<suggestion_id>/edit", methods=["GET", "POST"])
 def edit_suggestion(suggestion_id: str):
-    repo = SuggestionsRepository(get_mongo_db())
+    db = get_mongo_db()
+    repo = SuggestionsRepository(db)
+    recipes_repo = RecipesRepository(db)
     suggestion = repo.get_by_id(suggestion_id)
     if not suggestion:
         flash("Suggestion not found.", "warning")
@@ -194,11 +196,7 @@ def edit_suggestion(suggestion_id: str):
             flash("Please select a valid meal type.", "danger")
             return redirect(url_for("web.edit_suggestion", suggestion_id=suggestion_id))
 
-        tags = [
-            item.strip()
-            for item in str(request.form.get("tags", "")).split(",")
-            if item.strip()
-        ]
+        tags = _merge_tags_from_form(request.form)
         method = [
             item.strip()
             for item in str(request.form.get("method", "")).splitlines()
@@ -250,8 +248,17 @@ def edit_suggestion(suggestion_id: str):
             flash("No changes were saved.", "warning")
         return redirect(url_for("web.suggestion_detail", suggestion_id=suggestion_id))
 
+    selected_tags = _normalize_tag_values(
+        suggestion.get("recipe", {}).get("metadata", {}).get("tags", [])
+    )
+    available_tags = _merge_available_tags(recipes_repo.list_all_tags(), selected_tags)
+
     return render_template(
-        "suggestion_edit.html", suggestion=suggestion, meal_types=sorted(MEAL_TYPES)
+        "suggestion_edit.html",
+        suggestion=suggestion,
+        meal_types=sorted(MEAL_TYPES),
+        available_tags=available_tags,
+        selected_tags=selected_tags,
     )
 
 
@@ -735,11 +742,7 @@ def edit_recipe(recipe_id: str):
             flash("Please select a valid meal type.", "danger")
             return redirect(url_for("web.edit_recipe", recipe_id=recipe_id))
 
-        tags = [
-            item.strip()
-            for item in str(request.form.get("tags", "")).split(",")
-            if item.strip()
-        ]
+        tags = _merge_tags_from_form(request.form)
         method = [
             item.strip()
             for item in str(request.form.get("method", "")).splitlines()
@@ -788,19 +791,63 @@ def edit_recipe(recipe_id: str):
             flash("No changes were saved.", "warning")
         return redirect(url_for("web.recipe_detail", recipe_id=recipe_id))
 
+    selected_tags = _normalize_tag_values(recipe.get("metadata", {}).get("tags", []))
+    available_tags = _merge_available_tags(repo.list_all_tags(), selected_tags)
+
     return render_template(
-        "recipe_edit.html", recipe=recipe, meal_types=sorted(MEAL_TYPES)
+        "recipe_edit.html",
+        recipe=recipe,
+        meal_types=sorted(MEAL_TYPES),
+        available_tags=available_tags,
+        selected_tags=selected_tags,
     )
 
 
 @web_bp.post("/recipes/<recipe_id>/delete")
 def delete_recipe(recipe_id: str):
-    deleted = RecipesRepository(get_mongo_db()).soft_delete(recipe_id)
+    deleted = RecipesRepository(get_mongo_db()).delete(recipe_id)
     if deleted:
-        flash("Recipe deleted.", "info")
+        flash("Recipe permanently deleted.", "info")
     else:
         flash("Recipe not found.", "warning")
     return redirect(url_for("web.recipes_page"))
+
+
+def _merge_tags_from_form(form_data) -> list[str]:
+    selected_tags = form_data.getlist("tags_selected")
+    manual_tags = _split_tag_text(str(form_data.get("new_tags", "")))
+    legacy_tags = _split_tag_text(str(form_data.get("tags", "")))
+    return _normalize_tag_values([*selected_tags, *manual_tags, *legacy_tags])
+
+
+def _split_tag_text(raw: str) -> list[str]:
+    normalized = raw.replace("\n", ",")
+    return [item.strip() for item in normalized.split(",") if item.strip()]
+
+
+def _normalize_tag_values(values) -> list[str]:
+    if values is None:
+        return []
+
+    output: list[str] = []
+    seen: set[str] = set()
+
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        cleaned = value.strip().lower()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        output.append(cleaned)
+
+    return output
+
+
+def _merge_available_tags(
+    existing_tags: list[str], selected_tags: list[str]
+) -> list[str]:
+    return sorted(set(existing_tags) | set(selected_tags))
 
 
 def _feedback_state_from_events(events: list[dict]) -> dict[str, str]:
