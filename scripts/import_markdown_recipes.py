@@ -1,3 +1,6 @@
+# To import all mark down recipes at /recipes (excluding AI Generated):
+# .venv/bin/python scripts/import_markdown_recipes.py --recipes-dir recipes --exclude-dir AI-suggested
+
 from __future__ import annotations
 
 import argparse

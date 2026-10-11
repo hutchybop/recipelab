@@ -1,3 +1,19 @@
+## Session 18
+### Sunday October 11th
+<br>
+
+**Summary:** This session improved taste-profile learning by normalizing ingredient phrases and replacing stale or unsupported pending suggestions. It also expanded profile suggestion management with edit, undo, reopen, delete, clear-pending, and bulk actions across lifecycle states, backed by regression tests, UAT coverage, and updated profiling guidance.
+
+**Git Branch:** main <br>
+**Git commits:** <br>
+07ae191, 7342cd4
+
+**Session git history:**
+- add bulk profiling logic 20261011-0752 - *Added individual and bulk profile-suggestion lifecycle controls, coverage, and a UAT checklist for reviewing, editing, applying, undoing, reopening, and deleting suggestions.*
+- update tasting profile 20261010-1951 - *Normalized ingredient phrases for profile suggestions, filtered preparation noise, cleared stale pending proposals, and expanded related tests and documentation.*
+---
+<br>
+
 ## Session 17
 ### Saturday October 10th
 <br>
