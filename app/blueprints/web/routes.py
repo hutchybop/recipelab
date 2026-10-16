@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from flask import (
     Blueprint,
     Response,
@@ -16,10 +18,10 @@ from ...extensions import get_mongo_db
 from ...repositories import (
     FeedbackEventsRepository,
     PreferencesRepository,
-    ProfileUpdateSuggestionsRepository,
     RecipesRepository,
     RuntimeSettingsRepository,
     SuggestionsRepository,
+    TastingProfilesRepository,
 )
 from ...services import (
     MEAL_TYPES,
@@ -30,8 +32,8 @@ from ...services import (
     edit_profile_update_suggestion,
     get_allowed_models,
     get_effective_model,
-    generate_profile_update_suggestions,
     generate_recipe_suggestion,
+    generate_tasting_profile_candidate,
     normalize_recipe_document,
     pdf_filename_for_recipe,
     reopen_profile_update_suggestion,
@@ -561,15 +563,13 @@ def clear_feedback_note():
 def profile_page() -> str:
     db = get_mongo_db()
     preferences_repo = PreferencesRepository(db)
-    updates_repo = ProfileUpdateSuggestionsRepository(db)
+    tasting_profiles_repo = TastingProfilesRepository(db)
 
     active_profile = preferences_repo.get_active_profile() or {
         "profile_name": "default",
         "active": True,
         "hard_avoids": [],
-        "likes": [],
         "dislikes": [],
-        "notes": "",
         "weights": {},
     }
 
@@ -577,22 +577,9 @@ def profile_page() -> str:
         action = str(request.form.get("action", "save_profile")).strip()
 
         if action == "save_profile":
-            profile_name = (
-                str(
-                    request.form.get(
-                        "profile_name", active_profile.get("profile_name", "default")
-                    )
-                ).strip()
-                or "default"
-            )
             hard_avoids = [
                 item.strip()
                 for item in str(request.form.get("hard_avoids", "")).splitlines()
-                if item.strip()
-            ]
-            likes = [
-                item.strip()
-                for item in str(request.form.get("likes", "")).splitlines()
                 if item.strip()
             ]
             dislikes = [
@@ -600,50 +587,88 @@ def profile_page() -> str:
                 for item in str(request.form.get("dislikes", "")).splitlines()
                 if item.strip()
             ]
-            notes = str(request.form.get("notes", "")).strip()
 
             preferences_repo.upsert_profile(
                 {
-                    "profile_name": profile_name,
+                    "profile_name": str(active_profile.get("profile_name", "default"))
+                    or "default",
                     "active": True,
                     "hard_avoids": hard_avoids,
-                    "likes": likes,
+                    "likes": [],
                     "dislikes": dislikes,
-                    "notes": notes,
+                    "notes": "",
                     "weights": active_profile.get("weights", {}),
                 }
             )
             flash("Profile updated.", "success")
             return redirect(url_for("web.profile_page"))
 
-        if action == "refresh_suggestions":
-            result = generate_profile_update_suggestions(db)
-            flash(
-                f"Generated {result['created']} profile update suggestion(s).", "info"
-            )
+        if action in {"generate_tasting_profile", "regenerate_tasting_profile"}:
+            result = generate_tasting_profile_candidate(db=db)
+            if result.get("ok"):
+                flash(
+                    "Tasting profile candidate generated. Review and accept or reject it.",
+                    "success",
+                )
+            else:
+                flash(
+                    result.get("error", "Could not generate tasting profile."), "danger"
+                )
             return redirect(url_for("web.profile_page"))
 
-        if action == "clear_pending_suggestions":
-            rejected_count = updates_repo.reject_all_pending()
-            flash(
-                f"Cleared {rejected_count} pending suggestion(s). Your profile and feedback were not changed.",
-                "info",
-            )
-            return redirect(url_for("web.profile_page"))
-
-    pending_updates = updates_repo.list_pending(limit=500)
-    applied_updates = updates_repo.list_by_status("applied", limit=500)
-    rejected_updates = updates_repo.list_by_status("rejected", limit=500)
-    reverted_updates = updates_repo.list_by_status("reverted", limit=500)
     active_profile = preferences_repo.get_active_profile() or active_profile
+    active_tasting_profile = tasting_profiles_repo.get_active_profile()
+    latest_candidate = tasting_profiles_repo.get_latest_candidate()
+
+    active_tasting_profile_json = (
+        json.dumps(
+            active_tasting_profile.get("profile", {}), indent=2, ensure_ascii=False
+        )
+        if active_tasting_profile
+        else ""
+    )
+    latest_candidate_json = (
+        json.dumps(latest_candidate.get("profile", {}), indent=2, ensure_ascii=False)
+        if latest_candidate
+        else ""
+    )
+
     return render_template(
         "profile.html",
         profile=active_profile,
-        pending_updates=pending_updates,
-        applied_updates=applied_updates,
-        rejected_updates=rejected_updates,
-        reverted_updates=reverted_updates,
+        active_tasting_profile=active_tasting_profile,
+        latest_candidate=latest_candidate,
+        active_tasting_profile_json=active_tasting_profile_json,
+        latest_candidate_json=latest_candidate_json,
     )
+
+
+@web_bp.post("/profile/tasting-profiles/<profile_id>/accept")
+def accept_tasting_profile(profile_id: str):
+    accepted = TastingProfilesRepository(get_mongo_db()).accept_candidate(profile_id)
+    flash(
+        (
+            "Tasting profile accepted and set active."
+            if accepted
+            else "Candidate tasting profile not found or no longer pending."
+        ),
+        "success" if accepted else "warning",
+    )
+    return redirect(url_for("web.profile_page"))
+
+
+@web_bp.post("/profile/tasting-profiles/<profile_id>/reject")
+def reject_tasting_profile(profile_id: str):
+    rejected = TastingProfilesRepository(get_mongo_db()).reject_candidate(profile_id)
+    flash(
+        (
+            "Tasting profile candidate rejected."
+            if rejected
+            else "Candidate tasting profile not found or no longer pending."
+        ),
+        "info" if rejected else "warning",
+    )
+    return redirect(url_for("web.profile_page"))
 
 
 @web_bp.post("/profile/suggestions/<suggestion_id>/apply")
