@@ -9,6 +9,7 @@ from .profile_update_suggestions_repository import ProfileUpdateSuggestionsRepos
 from .recipes_repository import RecipesRepository
 from .runtime_settings_repository import RuntimeSettingsRepository
 from .suggestions_repository import SuggestionsRepository
+from .tasting_profiles_repository import TastingProfilesRepository
 
 
 def ensure_all_indexes(db: Database) -> None:
@@ -19,3 +20,4 @@ def ensure_all_indexes(db: Database) -> None:
     GenerationRunsRepository.ensure_indexes(db)
     ProfileUpdateSuggestionsRepository.ensure_indexes(db)
     RuntimeSettingsRepository.ensure_indexes(db)
+    TastingProfilesRepository.ensure_indexes(db)

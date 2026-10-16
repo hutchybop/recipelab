@@ -9,6 +9,7 @@ from app.repositories import (
     RecipesRepository,
     RuntimeSettingsRepository,
     SuggestionsRepository,
+    TastingProfilesRepository,
 )
 
 from tests.fakes import FakeDatabase
@@ -161,6 +162,100 @@ class RepositoryTests(unittest.TestCase):
         repository.set_selected_model("gpt-5.4")
 
         self.assertEqual(repository.get_selected_model(), "gpt-5.4")
+
+    def test_tasting_profiles_repository_create_candidate_and_list(self):
+        repository = TastingProfilesRepository(self.db)
+        candidate = repository.create_candidate(
+            {
+                "profile": {"core_taste_preferences_global": ["likes pulses"]},
+                "input_snapshot": {
+                    "dislikes": ["mushrooms"],
+                    "hard_avoids": ["peanuts"],
+                    "recipe_ids": ["r1", "r2"],
+                    "recipe_count": 2,
+                },
+                "llm": {
+                    "provider": "openai_compatible",
+                    "model": "gpt-test",
+                    "endpoint": "",
+                    "prompt_template": "tasting_profile_v1",
+                    "prompt_text": "prompt",
+                    "raw_response": "{}",
+                },
+            }
+        )
+
+        self.assertEqual(candidate["status"], "candidate_pending")
+        self.assertFalse(candidate["is_active"])
+        self.assertEqual(candidate["review"]["decision"], "pending")
+
+        latest = repository.get_latest_candidate()
+        self.assertIsNotNone(latest)
+        assert latest is not None
+        self.assertEqual(latest["_id"], candidate["_id"])
+
+    def test_tasting_profiles_repository_accept_candidate_supersedes_previous_active(
+        self,
+    ):
+        repository = TastingProfilesRepository(self.db)
+
+        previous = repository.create_candidate(
+            {
+                "profile": {"core_taste_preferences_global": ["old"]},
+                "input_snapshot": {},
+                "llm": {},
+            }
+        )
+        self.assertTrue(repository.accept_candidate(previous["_id"]))
+
+        candidate = repository.create_candidate(
+            {
+                "profile": {"core_taste_preferences_global": ["new"]},
+                "input_snapshot": {},
+                "llm": {},
+            }
+        )
+        accepted = repository.accept_candidate(
+            candidate["_id"], decision_note="looks good"
+        )
+        self.assertTrue(accepted)
+
+        active = repository.get_active_profile()
+        self.assertIsNotNone(active)
+        assert active is not None
+        self.assertEqual(active["_id"], candidate["_id"])
+        self.assertEqual(active["status"], "accepted")
+        self.assertEqual(active["review"]["decision"], "accepted")
+        self.assertEqual(active["review"]["decision_note"], "looks good")
+
+        previous_record = repository.get_by_id(previous["_id"])
+        self.assertIsNotNone(previous_record)
+        assert previous_record is not None
+        self.assertEqual(previous_record["status"], "superseded")
+        self.assertFalse(previous_record["is_active"])
+
+    def test_tasting_profiles_repository_reject_candidate(self):
+        repository = TastingProfilesRepository(self.db)
+        candidate = repository.create_candidate(
+            {
+                "profile": {"core_taste_preferences_global": []},
+                "input_snapshot": {},
+                "llm": {},
+            }
+        )
+
+        rejected = repository.reject_candidate(
+            candidate["_id"], decision_note="not specific enough"
+        )
+        self.assertTrue(rejected)
+
+        found = repository.get_by_id(candidate["_id"])
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found["status"], "rejected")
+        self.assertFalse(found["is_active"])
+        self.assertEqual(found["review"]["decision"], "rejected")
+        self.assertEqual(found["review"]["decision_note"], "not specific enough")
 
 
 if __name__ == "__main__":

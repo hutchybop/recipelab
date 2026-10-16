@@ -6,6 +6,7 @@ from .profile_update_suggestions_repository import ProfileUpdateSuggestionsRepos
 from .recipes_repository import RecipesRepository
 from .runtime_settings_repository import RuntimeSettingsRepository
 from .suggestions_repository import SuggestionsRepository
+from .tasting_profiles_repository import TastingProfilesRepository
 
 __all__ = [
     "FeedbackEventsRepository",
@@ -15,5 +16,6 @@ __all__ = [
     "RecipesRepository",
     "RuntimeSettingsRepository",
     "SuggestionsRepository",
+    "TastingProfilesRepository",
     "ensure_all_indexes",
 ]

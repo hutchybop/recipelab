@@ -11,6 +11,8 @@ SUGGESTION_STATUSES = {"draft", "accepted", "rejected", "draft_invalid"}
 TARGET_TYPES = {"recipe", "suggestion"}
 FEEDBACK_SIGNALS = {"liked", "disliked", "note"}
 GENERATION_RUN_STATUSES = {"started", "succeeded", "failed"}
+TASTING_PROFILE_STATUSES = {"candidate_pending", "accepted", "rejected", "superseded"}
+TASTING_PROFILE_DECISIONS = {"pending", "accepted", "rejected"}
 
 _UNIT_PATTERN = re.compile(
     r"^(g|kg|ml|l|tsp|tbsp|cup|cups|oz|lb|clove|cloves|pinch|handful|handfuls)$",
@@ -339,4 +341,122 @@ def normalize_generation_run_document(document: Mapping[str, Any]) -> dict[str, 
         "created_at": payload.get("created_at") or utc_now(),
         "updated_at": utc_now(),
     }
+    return normalized
+
+
+def normalize_tasting_profile_status(status: Any) -> str:
+    normalized = _clean_string(status, field_name="status", required=True)
+    if normalized not in TASTING_PROFILE_STATUSES:
+        raise ValueError(f"status must be one of {sorted(TASTING_PROFILE_STATUSES)}")
+    return normalized
+
+
+def normalize_tasting_profile_document(document: Mapping[str, Any]) -> dict[str, Any]:
+    payload = deepcopy(dict(document))
+    status = normalize_tasting_profile_status(
+        payload.get("status", "candidate_pending")
+    )
+    is_active = bool(payload.get("is_active", False))
+
+    review_payload = payload.get("review") or {}
+    decision = _clean_string(
+        review_payload.get("decision", "pending"),
+        field_name="review.decision",
+        required=True,
+    )
+    if decision not in TASTING_PROFILE_DECISIONS:
+        raise ValueError(
+            f"review.decision must be one of {sorted(TASTING_PROFILE_DECISIONS)}"
+        )
+
+    profile = payload.get("profile", {})
+    if not isinstance(profile, Mapping):
+        raise ValueError("profile must be an object")
+
+    input_snapshot = payload.get("input_snapshot", {})
+    if not isinstance(input_snapshot, Mapping):
+        raise ValueError("input_snapshot must be an object")
+
+    llm = payload.get("llm", {})
+    if not isinstance(llm, Mapping):
+        raise ValueError("llm must be an object")
+
+    normalized = {
+        "status": status,
+        "is_active": is_active,
+        "profile": dict(profile),
+        "input_snapshot": {
+            "dislikes": _string_list(
+                input_snapshot.get("dislikes", []), field_name="input_snapshot.dislikes"
+            ),
+            "hard_avoids": _string_list(
+                input_snapshot.get("hard_avoids", []),
+                field_name="input_snapshot.hard_avoids",
+            ),
+            "recipe_ids": _string_list(
+                input_snapshot.get("recipe_ids", []),
+                field_name="input_snapshot.recipe_ids",
+            ),
+            "recipe_count": int(input_snapshot.get("recipe_count", 0) or 0),
+        },
+        "llm": {
+            "provider": _clean_string(
+                llm.get("provider", ""), field_name="llm.provider"
+            ),
+            "model": _clean_string(llm.get("model", ""), field_name="llm.model"),
+            "endpoint": _clean_string(
+                llm.get("endpoint", ""), field_name="llm.endpoint"
+            ),
+            "prompt_template": _clean_string(
+                llm.get("prompt_template", ""), field_name="llm.prompt_template"
+            ),
+            "prompt_text": _clean_string(
+                llm.get("prompt_text", ""), field_name="llm.prompt_text"
+            ),
+            "raw_response": _clean_string(
+                llm.get("raw_response", ""), field_name="llm.raw_response"
+            ),
+            "error": _clean_string(llm.get("error", ""), field_name="llm.error"),
+        },
+        "review": {
+            "decision": decision,
+            "decision_note": _clean_string(
+                review_payload.get("decision_note", ""),
+                field_name="review.decision_note",
+            ),
+            "decided_at": review_payload.get("decided_at"),
+        },
+        "generation_run_id": _clean_string(
+            payload.get("generation_run_id", ""), field_name="generation_run_id"
+        ),
+        "created_at": payload.get("created_at") or utc_now(),
+        "updated_at": utc_now(),
+        "accepted_at": payload.get("accepted_at"),
+        "rejected_at": payload.get("rejected_at"),
+        "superseded_at": payload.get("superseded_at"),
+    }
+
+    if normalized["input_snapshot"]["recipe_count"] < 0:
+        raise ValueError("input_snapshot.recipe_count must be >= 0")
+
+    if status == "accepted":
+        if normalized["review"]["decision"] != "accepted":
+            raise ValueError("accepted status requires review.decision=accepted")
+        if not normalized["is_active"]:
+            raise ValueError("accepted status requires is_active=true")
+    elif status == "candidate_pending":
+        if normalized["review"]["decision"] != "pending":
+            raise ValueError(
+                "candidate_pending status requires review.decision=pending"
+            )
+        if normalized["is_active"]:
+            raise ValueError("candidate_pending status requires is_active=false")
+    elif status == "rejected":
+        if normalized["review"]["decision"] != "rejected":
+            raise ValueError("rejected status requires review.decision=rejected")
+        if normalized["is_active"]:
+            raise ValueError("rejected status requires is_active=false")
+    elif status == "superseded" and normalized["is_active"]:
+        raise ValueError("superseded status requires is_active=false")
+
     return normalized
