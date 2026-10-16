@@ -1,3 +1,19 @@
+## Session 21
+### Friday October 16th
+<br>
+
+**Summary:** This session improved the tasting profile page UX by replacing raw JSON blocks with sectioned, human-readable profile displays for both latest candidates and accepted profiles. It also applied a dark-theme heading color polish and recorded the previous session details in the development log.
+
+**Git Branch:** main <br>
+**Git commits:** <br>
+34b2a05, 2eff813
+
+**Session git history:**
+- update tasting profile ui view 20261016-2232 - *Refactored tasting profile rendering into structured sections, updated the profile template presentation, and added dark-theme heading color styling.*
+- update devlog 20261016-2201 - *Updated `docs/DEVELOPMENT_LOG.md` with the prior session entry and commit history snapshot.*
+---
+<br>
+
 ## Session 20
 ### Friday October 16th
 <br>
