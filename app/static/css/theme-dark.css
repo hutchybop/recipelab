@@ -106,10 +106,6 @@ h1, h2, h3, h4, h5, h6,
   white-space: normal;
 }
 
-.feedback-note-input {
-  max-width: 360px;
-}
-
 .text-wrap-anywhere {
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -134,10 +130,6 @@ h1, h2, h3, h4, h5, h6,
   .mobile-stack > form > .btn,
   .mobile-stack > .btn {
     width: 100%;
-  }
-
-  .feedback-note-input {
-    max-width: none;
   }
 
   .app-navbar .navbar-brand,

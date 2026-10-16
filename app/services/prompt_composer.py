@@ -4,111 +4,62 @@ import json
 from typing import Any, Mapping
 
 
-DEFAULT_HARD_CONSTRAINTS = [
-    "whole chickpeas",
-    "peanuts",
-    "sprouts",
-    "cauliflower",
-    "cinnamon",
-]
-
-
 def compose_recipe_prompt(
     *,
     meal_type: str,
     instructions: str,
     profile: Mapping[str, Any] | None,
-    hard_constraints: list[str] | None = None,
     tasting_profile: Mapping[str, Any] | None = None,
     selected_recipes: list[Mapping[str, Any]] | None = None,
 ) -> str:
-    if tasting_profile is not None:
-        trimmed_instructions = instructions.strip()
-        instructions_block = (
-            f"User instructions:\n{trimmed_instructions}\n\n"
-            if trimmed_instructions
-            else ""
-        )
-        selected = [dict(item) for item in (selected_recipes or [])]
-        selected_block = (
-            "Reference recipes (JSON array, max 4):\n"
-            f"{json.dumps(selected, ensure_ascii=False, indent=2)}\n\n"
-            if selected
-            else ""
-        )
-
-        return (
-            "## Persona\n"
-            "Act as an experienced recipe developer specialising in practical home cooking, balanced flavours, and personalised recipe recommendations.\n"
-            "Create one original recipe that aligns with the user's tasting profile while still offering novelty.\n\n"
-            "---\n\n"
-            "## Task\n"
-            "Generate exactly one recipe JSON object.\n"
-            "Return JSON only. No Markdown, no prose outside JSON.\n\n"
-            "---\n\n"
-            "## Inputs\n\n"
-            f"Requested meal type:\n{meal_type}\n\n"
-            f"{instructions_block}"
-            "Active tasting profile (JSON):\n"
-            f"{json.dumps(dict(tasting_profile), ensure_ascii=False, indent=2)}\n\n"
-            f"{selected_block}"
-            "---\n\n"
-            "## Rules\n"
-            "1. Follow requested meal type exactly.\n"
-            "2. Respect hard restrictions:\n"
-            "   - Never include `hard_avoids_strict` ingredients.\n"
-            "   - Avoid `explicit_dislikes` unless tasting profile explicitly permits a narrow exception.\n"
-            "3. Use tasting profile as primary personalization source.\n"
-            "4. If reference recipes are provided, use them as style/context signals only; do not copy.\n"
-            "5. Ensure culinary coherence across ingredients, servings, timing, and method.\n"
-            "6. Include at least one clear protein source consistent with profile and instructions.\n"
-            "7. Method must be concise, sequential, and actionable.\n"
-            "8. Every ingredient used in method must appear in ingredients list.\n"
-            "9. Keep recipe practical for a home cook.\n"
-            '10. For `rating`, return an empty string (`""`) because user rating is user-owned metadata.\n'
-            '11. Set `source` to `"AI Generated"`.\n\n'
-            "---\n\n"
-            "## Output schema\n"
-            "{\n"
-            '  "title": "string",\n'
-            '  "meal_type": "string",\n'
-            '  "source": "AI Generated",\n'
-            '  "servings": "string or number",\n'
-            '  "prep_time": "string or number",\n'
-            '  "cook_time": "string or number",\n'
-            '  "rating": "",\n'
-            '  "difficulty": "string or number",\n'
-            '  "tags": ["string"],\n'
-            '  "ingredients": [{"quantity": "string", "unit": "string", "ingredient": "string"}],\n'
-            '  "method": ["string"],\n'
-            '  "notes": ["string"]\n'
-            "}\n"
-        )
-
-    profile = profile or {}
-    constraints = hard_constraints or DEFAULT_HARD_CONSTRAINTS
-
-    likes = ", ".join(profile.get("likes", [])) or "(none provided)"
-    dislikes = ", ".join(profile.get("dislikes", [])) or "(none provided)"
-    avoids = ", ".join(profile.get("hard_avoids", constraints))
-    notes = profile.get("notes", "") or "(none provided)"
-    user_instructions = instructions.strip() or "(none provided)"
+    _ = profile
+    effective_tasting_profile = dict(tasting_profile or {})
+    trimmed_instructions = instructions.strip()
+    instructions_block = (
+        f"User instructions:\n{trimmed_instructions}\n\n"
+        if trimmed_instructions
+        else ""
+    )
+    selected = [dict(item) for item in (selected_recipes or [])]
+    selected_block = (
+        "Reference recipes (JSON array, max 4):\n"
+        f"{json.dumps(selected, ensure_ascii=False, indent=2)}\n\n"
+        if selected
+        else ""
+    )
 
     return (
-        "Generate exactly one recipe as valid JSON only. No markdown, no extra prose.\n\n"
-        f"Meal type: {meal_type}\n"
-        f"User instructions: {user_instructions}\n\n"
-        "Active tasting profile:\n"
-        f"- likes: {likes}\n"
-        f"- dislikes: {dislikes}\n"
-        f"- hard avoids (strict): {avoids}\n"
-        f"- notes: {notes}\n\n"
-        "Hard requirements:\n"
-        "- Respect all hard avoids strictly.\n"
-        "- Keep difficulty practical for a home cook.\n"
-        "- Include at least one clear protein source.\n"
-        "- Keep method concise and sequential.\n\n"
-        "Output JSON object schema:\n"
+        "## Persona\n"
+        "Act as an experienced recipe developer specialising in practical home cooking, balanced flavours, and personalised recipe recommendations.\n"
+        "Create one original recipe that aligns with the user's tasting profile while still offering novelty.\n\n"
+        "---\n\n"
+        "## Task\n"
+        "Generate exactly one recipe JSON object.\n"
+        "Return JSON only. No Markdown, no prose outside JSON.\n\n"
+        "---\n\n"
+        "## Inputs\n\n"
+        f"Requested meal type:\n{meal_type}\n\n"
+        f"{instructions_block}"
+        "Active tasting profile (JSON):\n"
+        f"{json.dumps(effective_tasting_profile, ensure_ascii=False, indent=2)}\n\n"
+        f"{selected_block}"
+        "---\n\n"
+        "## Rules\n"
+        "1. Follow requested meal type exactly.\n"
+        "2. Respect hard restrictions:\n"
+        "   - Never include `hard_avoids_strict` ingredients.\n"
+        "   - Avoid `explicit_dislikes` unless tasting profile explicitly permits a narrow exception.\n"
+        "3. Use tasting profile as primary personalization source.\n"
+        "4. If reference recipes are provided, use them as style/context signals only; do not copy.\n"
+        "5. Ensure culinary coherence across ingredients, servings, timing, and method.\n"
+        "6. Include at least one clear protein source consistent with profile and instructions.\n"
+        "7. Method must be concise, sequential, and actionable.\n"
+        "8. Every ingredient used in method must appear in ingredients list.\n"
+        "9. Keep recipe practical for a home cook.\n"
+        '10. For `rating`, return an empty string (`""`) because user rating is user-owned metadata.\n'
+        '11. Set `source` to `"AI Generated"`.\n\n'
+        "---\n\n"
+        "## Output schema\n"
         "{\n"
         '  "title": "string",\n'
         '  "meal_type": "string",\n'
@@ -116,7 +67,7 @@ def compose_recipe_prompt(
         '  "servings": "string or number",\n'
         '  "prep_time": "string or number",\n'
         '  "cook_time": "string or number",\n'
-        '  "rating": "string or number",\n'
+        '  "rating": "",\n'
         '  "difficulty": "string or number",\n'
         '  "tags": ["string"],\n'
         '  "ingredients": [{"quantity": "string", "unit": "string", "ingredient": "string"}],\n'

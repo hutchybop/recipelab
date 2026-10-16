@@ -7,18 +7,14 @@ from .generation_service import (
 from .llm_adapter import LLMAdapter, LLMAdapterError
 from .pdf_export_service import pdf_filename_for_recipe, render_recipe_pdf
 from .prompt_composer import (
-    DEFAULT_HARD_CONSTRAINTS,
     compose_canonical_conversion_prompt,
     compose_recipe_prompt,
     compose_tasting_profile_prompt,
 )
 from .schema_utils import (
-    FEEDBACK_SIGNALS,
     GENERATION_RUN_STATUSES,
     MEAL_TYPES,
     SUGGESTION_STATUSES,
-    TARGET_TYPES,
-    normalize_feedback_event_document,
     normalize_generation_run_document,
     normalize_generation_run_status,
     normalize_preference_document,
@@ -29,14 +25,11 @@ from .schema_utils import (
 from .tasting_profile_service import generate_tasting_profile_candidate
 
 __all__ = [
-    "DEFAULT_HARD_CONSTRAINTS",
-    "FEEDBACK_SIGNALS",
     "GENERATION_RUN_STATUSES",
     "LLMAdapter",
     "LLMAdapterError",
     "MEAL_TYPES",
     "SUGGESTION_STATUSES",
-    "TARGET_TYPES",
     "compose_canonical_conversion_prompt",
     "compose_recipe_prompt",
     "compose_tasting_profile_prompt",
@@ -45,7 +38,6 @@ __all__ = [
     "generate_tasting_profile_candidate",
     "get_allowed_models",
     "get_effective_model",
-    "normalize_feedback_event_document",
     "normalize_generation_run_document",
     "normalize_generation_run_status",
     "normalize_preference_document",

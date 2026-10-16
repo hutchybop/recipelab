@@ -8,8 +8,6 @@ from typing import Any, Iterable, Mapping
 
 MEAL_TYPES = {"main", "lunch_batch", "lunch_single", "breakfast", "dessert"}
 SUGGESTION_STATUSES = {"draft", "accepted", "rejected", "draft_invalid"}
-TARGET_TYPES = {"recipe", "suggestion"}
-FEEDBACK_SIGNALS = {"liked", "disliked", "note"}
 GENERATION_RUN_STATUSES = {"started", "succeeded", "failed"}
 TASTING_PROFILE_STATUSES = {"candidate_pending", "accepted", "rejected", "superseded"}
 TASTING_PROFILE_DECISIONS = {"pending", "accepted", "rejected"}
@@ -292,29 +290,6 @@ def normalize_preference_document(document: Mapping[str, Any]) -> dict[str, Any]
         "updated_at": utc_now(),
     }
     return normalized
-
-
-def normalize_feedback_event_document(document: Mapping[str, Any]) -> dict[str, Any]:
-    payload = deepcopy(dict(document))
-    target_type = _clean_string(
-        payload.get("target_type"), field_name="target_type", required=True
-    )
-    if target_type not in TARGET_TYPES:
-        raise ValueError(f"target_type must be one of {sorted(TARGET_TYPES)}")
-
-    signal = _clean_string(payload.get("signal"), field_name="signal", required=True)
-    if signal not in FEEDBACK_SIGNALS:
-        raise ValueError(f"signal must be one of {sorted(FEEDBACK_SIGNALS)}")
-
-    return {
-        "target_type": target_type,
-        "target_id": _clean_string(
-            payload.get("target_id"), field_name="target_id", required=True
-        ),
-        "signal": signal,
-        "notes": _clean_string(payload.get("notes", ""), field_name="notes"),
-        "created_at": payload.get("created_at") or utc_now(),
-    }
 
 
 def normalize_generation_run_status(status: Any) -> str:

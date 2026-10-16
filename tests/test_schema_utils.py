@@ -3,7 +3,6 @@ from __future__ import annotations
 import unittest
 
 from app.services.schema_utils import (
-    normalize_feedback_event_document,
     normalize_generation_run_document,
     normalize_preference_document,
     normalize_recipe_document,
@@ -52,17 +51,6 @@ class SchemaUtilsTests(unittest.TestCase):
         )
         self.assertTrue(profile["active"])
         self.assertEqual(profile["hard_avoids"], ["peanuts"])
-
-    def test_normalize_feedback_event_document(self):
-        event = normalize_feedback_event_document(
-            {
-                "target_type": "recipe",
-                "target_id": "abc123",
-                "signal": "liked",
-                "notes": "Great",
-            }
-        )
-        self.assertEqual(event["signal"], "liked")
 
     def test_normalize_generation_run_document(self):
         run = normalize_generation_run_document(

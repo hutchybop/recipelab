@@ -14,19 +14,17 @@ class PromptComposerTests(unittest.TestCase):
         prompt = compose_recipe_prompt(
             meal_type="lunch_batch",
             instructions="high protein and meal-prep friendly",
-            profile={
-                "likes": ["lentils", "coriander"],
-                "dislikes": ["heavy dairy"],
-                "hard_avoids": ["peanuts", "sprouts"],
-                "notes": "Prefer one-pot meals",
+            profile={},
+            tasting_profile={
+                "explicit_dislikes": ["heavy dairy"],
+                "hard_avoids_strict": ["peanuts", "sprouts"],
             },
         )
 
-        self.assertIn("Meal type: lunch_batch", prompt)
+        self.assertIn("Requested meal type:\nlunch_batch", prompt)
         self.assertIn("high protein and meal-prep friendly", prompt)
-        self.assertIn("lentils, coriander", prompt)
-        self.assertIn("peanuts, sprouts", prompt)
-        self.assertIn("Output JSON object schema", prompt)
+        self.assertIn('"hard_avoids_strict": [', prompt)
+        self.assertIn("## Output schema", prompt)
 
     def test_compose_canonical_conversion_prompt_contains_allowed_tag_rules(self):
         prompt = compose_canonical_conversion_prompt(
