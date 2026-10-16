@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from flask import (
@@ -529,17 +528,11 @@ def profile_page() -> str:
         latest_candidate=latest_candidate,
     )
 
-    active_tasting_profile_json = (
-        json.dumps(
-            active_tasting_profile.get("profile", {}), indent=2, ensure_ascii=False
-        )
-        if active_tasting_profile
-        else ""
+    active_tasting_profile_sections = _format_tasting_profile_sections(
+        active_tasting_profile.get("profile", {}) if active_tasting_profile else None
     )
-    latest_candidate_json = (
-        json.dumps(latest_candidate.get("profile", {}), indent=2, ensure_ascii=False)
-        if latest_candidate
-        else ""
+    latest_candidate_sections = _format_tasting_profile_sections(
+        latest_candidate.get("profile", {}) if latest_candidate else None
     )
 
     return render_template(
@@ -547,11 +540,64 @@ def profile_page() -> str:
         profile=active_profile,
         active_tasting_profile=active_tasting_profile,
         latest_candidate=latest_candidate,
-        active_tasting_profile_json=active_tasting_profile_json,
-        latest_candidate_json=latest_candidate_json,
+        active_tasting_profile_sections=active_tasting_profile_sections,
+        latest_candidate_sections=latest_candidate_sections,
         stale_profile=stale_profile,
         profile_diff_summary=profile_diff_summary,
     )
+
+
+def _format_tasting_profile_sections(profile: Any) -> list[dict[str, Any]]:
+    if not isinstance(profile, dict):
+        return []
+
+    sections: list[dict[str, Any]] = []
+    for key, value in profile.items():
+        lines = _format_tasting_profile_value_lines(value)
+        if not lines:
+            continue
+        sections.append(
+            {
+                "key": str(key),
+                "label": _humanize_profile_key(str(key)),
+                "lines": lines,
+            }
+        )
+
+    return sections
+
+
+def _format_tasting_profile_value_lines(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    if isinstance(value, dict):
+        lines: list[str] = []
+        for key, nested_value in value.items():
+            nested_label = _humanize_profile_key(str(key))
+            if isinstance(nested_value, list):
+                nested_text = ", ".join(
+                    str(item).strip() for item in nested_value if str(item).strip()
+                )
+            elif isinstance(nested_value, dict):
+                nested_text = "; ".join(
+                    f"{_humanize_profile_key(str(child_key))}: {child_value}"
+                    for child_key, child_value in nested_value.items()
+                )
+            else:
+                nested_text = str(nested_value).strip()
+
+            if nested_text:
+                lines.append(f"{nested_label}: {nested_text}")
+        return lines
+
+    text = str(value).strip()
+    return [text] if text else []
+
+
+def _humanize_profile_key(key: str) -> str:
+    cleaned = key.replace("_", " ").strip()
+    return " ".join(part.capitalize() for part in cleaned.split())
 
 
 @web_bp.post("/profile/tasting-profiles/<profile_id>/accept")
