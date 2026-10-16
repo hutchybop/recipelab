@@ -1,3 +1,26 @@
+## Session 20
+### Friday October 16th
+<br>
+
+**Summary:** This session redesigned the AI tasting-profile workflow, implementing its data model, candidate generation and review lifecycle, accepted-profile generation gate, and optional recipe references while retiring legacy feedback and profile-refinement flows. It also added phase-specific UAT checklists, refreshed profiling and architecture documentation, recorded migration guidance, and updated the AI prompts.
+
+**Git Branch:** main <br>
+**Git commits:** <br>
+cf9d869, 17da1cd, efdddbe, 4c8dfc7, 6c0fcb1, fe80b4d, c5333f8, f335135, 05f8c8f
+
+**Session git history:**
+- complete profiling plan P7 20261016-2159 - *Updated taste-profiling and architecture guidance, added migration notes, and created the Phase 7 UAT checklist.*
+- complete profiling plan P6 20261016-2151 - *Added profile provenance/staleness hardening, operational error handling, and Phase 6 regression/UAT coverage.*
+- complete profiling plan P5 20261016-2132 - *Removed legacy feedback and profile-refinement routes, templates, and active dependencies, with Phase 5 coverage.*
+- complete profiling plan P4 20261016-2123 - *Added accepted-profile gating and a recipe-reference selector for generation, with prompt and route tests.*
+- complete profiling plan P3 20261016-2103 - *Refreshed the profile page for candidate generation, review, acceptance, and rejection.*
+- complete profiling plan P2 20261016-1751 - *Implemented tasting-profile candidate generation, validation, persistence, and service tests.*
+- complete profiling plan P1 20261016-1710 - *Added tasting-profile repository methods, indexes, schema helpers, and data-layer tests.*
+- add new profiling plan 20261016-1645 - *Documented the target tasting-profile workflow, schema, and phased implementation plan.*
+- update ai prompts 20261014-2001 - *Refined the AI tasting-profile and recipe-suggestion prompt templates.*
+---
+<br>
+
 ## Session 19
 ### Sunday October 11th
 <br>
