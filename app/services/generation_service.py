@@ -8,10 +8,10 @@ from pymongo.database import Database
 
 from ..repositories import (
     GenerationRunsRepository,
-    PreferencesRepository,
     RecipesRepository,
     RuntimeSettingsRepository,
     SuggestionsRepository,
+    TastingProfilesRepository,
     ensure_all_indexes,
 )
 from .llm_adapter import LLMAdapter, LLMAdapterError
@@ -25,14 +25,36 @@ def generate_recipe_suggestion(
     meal_type: str,
     instructions: str,
     model_override: str | None = None,
+    selected_recipe_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     ensure_all_indexes(db)
 
     generation_runs_repository = GenerationRunsRepository(db)
     suggestions_repository = SuggestionsRepository(db)
-    preferences_repository = PreferencesRepository(db)
+    tasting_profiles_repository = TastingProfilesRepository(db)
+    recipes_repository = RecipesRepository(db)
 
-    profile = preferences_repository.get_active_profile() or {}
+    active_tasting_profile = tasting_profiles_repository.get_active_profile()
+    if not active_tasting_profile:
+        return {
+            "ok": False,
+            "status_code": 409,
+            "error": "No accepted tasting profile found. Go to Profile to generate and accept one first.",
+        }
+
+    requested_ids = _normalize_selected_recipe_ids(selected_recipe_ids)
+    if len(requested_ids) > 4:
+        return {
+            "ok": False,
+            "status_code": 400,
+            "error": "You can select up to 4 reference recipes.",
+        }
+
+    reference_recipes = _load_reference_recipes(
+        recipes_repository=recipes_repository,
+        recipe_ids=requested_ids,
+    )
+
     model = _resolve_generation_model(db=db, model_override=model_override)
     provider = current_app.config.get("LLM_PROVIDER", "").strip()
     endpoint = current_app.config.get("LLM_ENDPOINT", "").strip()
@@ -48,7 +70,9 @@ def generate_recipe_suggestion(
     prompt = compose_recipe_prompt(
         meal_type=meal_type,
         instructions=instructions,
-        profile=profile,
+        profile={},
+        tasting_profile=active_tasting_profile.get("profile", {}),
+        selected_recipes=reference_recipes,
     )
 
     run = generation_runs_repository.create(
@@ -350,3 +374,45 @@ def _resolve_generation_model(*, db: Database, model_override: str | None) -> st
     if override:
         return override
     return get_effective_model(db)
+
+
+def _normalize_selected_recipe_ids(selected_recipe_ids: list[str] | None) -> list[str]:
+    unique_ids: list[str] = []
+    for raw in selected_recipe_ids or []:
+        if not isinstance(raw, str):
+            continue
+        cleaned = raw.strip()
+        if cleaned and cleaned not in unique_ids:
+            unique_ids.append(cleaned)
+    return unique_ids
+
+
+def _load_reference_recipes(
+    *, recipes_repository: RecipesRepository, recipe_ids: list[str]
+) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    for recipe_id in recipe_ids[:4]:
+        recipe = recipes_repository.get_by_id(recipe_id)
+        if not recipe or recipe.get("deleted_at") is not None:
+            continue
+        metadata = recipe.get("metadata", {})
+        if not isinstance(metadata, Mapping):
+            metadata = {}
+        selected.append(
+            {
+                "id": str(recipe.get("_id", "")).strip(),
+                "title": str(recipe.get("title", "")).strip(),
+                "meal_type": str(recipe.get("meal_type", "")).strip(),
+                "ingredients": recipe.get("ingredients", []),
+                "method": recipe.get("method", []),
+                "metadata": {
+                    "servings": metadata.get("servings", ""),
+                    "prep_time": metadata.get("prep_time", ""),
+                    "cook_time": metadata.get("cook_time", ""),
+                    "rating": metadata.get("rating", ""),
+                    "difficulty": metadata.get("difficulty", ""),
+                    "tags": metadata.get("tags", []),
+                },
+            }
+        )
+    return selected

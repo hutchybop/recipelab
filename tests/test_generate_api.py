@@ -19,6 +19,38 @@ class GenerateApiTests(unittest.TestCase):
         os.environ["LLM_MODEL"] = "test-model"
 
         self.fake_db = FakeDatabase()
+        self.fake_db["tasting_profiles"].docs.append(
+            {
+                "_id": "tp1",
+                "status": "accepted",
+                "is_active": True,
+                "profile": {
+                    "core_taste_preferences_global": ["balanced savory"],
+                    "ingredient_protein_preferences": ["lean proteins"],
+                    "flavour_cuisine_affinities": ["mediterranean"],
+                    "texture_dish_type_preferences": ["hearty bowls"],
+                    "cooking_behaviour_constraints": ["weeknight practical"],
+                    "meal_context_modifiers": {
+                        "main": ["flexible"],
+                        "lunch_batch": ["batch"],
+                        "lunch_single": ["portable"],
+                        "breakfast": ["light"],
+                        "dessert": ["limited"],
+                    },
+                    "explicit_dislikes": ["mushrooms"],
+                    "hard_avoids_strict": ["peanuts"],
+                    "inferred_avoidance_signals_red_flags": [],
+                    "ideal_constraints_for_new_suggestions": [],
+                    "known_uncertainties_data_gaps": [],
+                    "evidence_summary": {
+                        "recipe_count_used": 1,
+                        "high_rating_threshold": 8,
+                        "low_rating_threshold": 4,
+                        "notes": "",
+                    },
+                },
+            }
+        )
         self.app = create_app()
         self.client = self.app.test_client()
 
@@ -120,6 +152,20 @@ class GenerateApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         payload = response.get_json()
         self.assertIn("database connection failed", payload["error"])
+
+    @patch("app.blueprints.api.routes.get_mongo_db")
+    def test_generate_requires_accepted_tasting_profile(self, mock_get_mongo_db):
+        db = FakeDatabase()
+        mock_get_mongo_db.return_value = db
+
+        response = self.client.post(
+            "/api/generate",
+            json={"meal_type": "main", "instructions": "quick"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        payload = response.get_json()
+        self.assertIn("No accepted tasting profile", payload["error"])
 
 
 if __name__ == "__main__":

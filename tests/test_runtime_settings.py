@@ -22,6 +22,38 @@ class RuntimeSettingsTests(unittest.TestCase):
 
         self.app = create_app()
         self.db = FakeDatabase()
+        self.db["tasting_profiles"].docs.append(
+            {
+                "_id": "tp1",
+                "status": "accepted",
+                "is_active": True,
+                "profile": {
+                    "core_taste_preferences_global": ["balanced savory"],
+                    "ingredient_protein_preferences": ["lean proteins"],
+                    "flavour_cuisine_affinities": ["mediterranean"],
+                    "texture_dish_type_preferences": ["hearty bowls"],
+                    "cooking_behaviour_constraints": ["weeknight practical"],
+                    "meal_context_modifiers": {
+                        "main": ["flexible"],
+                        "lunch_batch": ["batch"],
+                        "lunch_single": ["portable"],
+                        "breakfast": ["light"],
+                        "dessert": ["limited"],
+                    },
+                    "explicit_dislikes": ["mushrooms"],
+                    "hard_avoids_strict": ["peanuts"],
+                    "inferred_avoidance_signals_red_flags": [],
+                    "ideal_constraints_for_new_suggestions": [],
+                    "known_uncertainties_data_gaps": [],
+                    "evidence_summary": {
+                        "recipe_count_used": 1,
+                        "high_rating_threshold": 8,
+                        "low_rating_threshold": 4,
+                        "notes": "",
+                    },
+                },
+            }
+        )
 
     def tearDown(self):
         self.app.extensions["mongo_client"].close()

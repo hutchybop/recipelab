@@ -6,6 +6,13 @@
   <div class="card border-0 shadow-sm">
     <div class="card-body p-4">
       <h1 class="h3 mb-3">Generate a Recipe</h1>
+
+      {% if not has_accepted_tasting_profile %}
+        <div class="alert alert-warning">
+          No accepted tasting profile found. Please <a href="{{ url_for('web.profile_page') }}">generate and accept one in Profile</a> first.
+        </div>
+      {% endif %}
+
       <form method="post" action="{{ url_for('web.generate_page') }}" class="row g-3">
         <div class="col-md-4">
           <label class="form-label" for="meal_type">Meal Type</label>
@@ -34,8 +41,30 @@
         </div>
 
         <div class="col-12">
+          <label class="form-label d-block">Reference Recipes (optional, up to 4)</label>
+          <details class="border rounded p-3">
+            <summary class="fw-semibold">Select recipes</summary>
+            <div class="mt-2 d-flex flex-column gap-2">
+              {% for recipe in available_recipes %}
+                <label class="form-check-label">
+                  <input
+                    class="form-check-input me-2"
+                    type="checkbox"
+                    name="reference_recipe_ids"
+                    value="{{ recipe['_id'] }}"
+                    {% if recipe['_id']|string in selected_recipe_ids %}checked{% endif %}
+                  />
+                  {{ recipe.get('title', 'Untitled') }}
+                  <small class="text-muted">({{ recipe.get('meal_type', '-') }})</small>
+                </label>
+              {% endfor %}
+            </div>
+          </details>
+        </div>
+
+        <div class="col-12">
           <div class="action-row mobile-stack">
-            <button class="btn btn-primary" type="submit">Generate</button>
+            <button class="btn btn-primary" type="submit" {% if not has_accepted_tasting_profile %}disabled{% endif %}>Generate</button>
             <a class="btn btn-outline-secondary" href="{{ url_for('web.suggestions_page') }}">View Suggestions</a>
           </div>
         </div>

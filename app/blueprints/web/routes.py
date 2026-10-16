@@ -83,14 +83,27 @@ def index() -> str:
 def generate_page() -> str:
     selected_meal_type = "main"
     instructions = ""
+    selected_recipe_ids: list[str] = []
     db = get_mongo_db()
+    active_tasting_profile = TastingProfilesRepository(db).get_active_profile()
+    available_recipes = RecipesRepository(db).list(limit=300)
 
     if request.method == "POST":
         selected_meal_type = str(request.form.get("meal_type", "main")).strip()
         instructions = str(request.form.get("instructions", "")).strip()
+        selected_recipe_ids = [
+            item.strip()
+            for item in request.form.getlist("reference_recipe_ids")
+            if isinstance(item, str) and item.strip()
+        ]
+        selected_recipe_ids = list(dict.fromkeys(selected_recipe_ids))
 
         if selected_meal_type not in MEAL_TYPES:
             flash("Please select a valid meal type.", "danger")
+            return redirect(url_for("web.generate_page"))
+
+        if len(selected_recipe_ids) > 4:
+            flash("You can select up to 4 reference recipes.", "danger")
             return redirect(url_for("web.generate_page"))
 
         try:
@@ -98,6 +111,7 @@ def generate_page() -> str:
                 db=db,
                 meal_type=selected_meal_type,
                 instructions=instructions,
+                selected_recipe_ids=selected_recipe_ids,
             )
         except Exception:
             flash(
@@ -131,6 +145,9 @@ def generate_page() -> str:
         meal_types=sorted(MEAL_TYPES),
         selected_meal_type=selected_meal_type,
         instructions=instructions,
+        selected_recipe_ids=selected_recipe_ids,
+        available_recipes=available_recipes,
+        has_accepted_tasting_profile=active_tasting_profile is not None,
         current_model=get_effective_model(db),
     )
 

@@ -32,6 +32,16 @@ def generate_recipe():
     meal_type = str(payload.get("meal_type", "")).strip()
     instructions = str(payload.get("instructions", "")).strip()
     model_override = payload.get("model")
+    reference_recipe_ids_payload = payload.get("reference_recipe_ids")
+    reference_recipe_ids = (
+        [
+            str(item).strip()
+            for item in reference_recipe_ids_payload
+            if isinstance(item, str) and str(item).strip()
+        ]
+        if isinstance(reference_recipe_ids_payload, list)
+        else []
+    )
 
     if meal_type not in MEAL_TYPES:
         return (
@@ -52,6 +62,7 @@ def generate_recipe():
             model_override=(
                 str(model_override).strip() if isinstance(model_override, str) else None
             ),
+            selected_recipe_ids=reference_recipe_ids,
         )
     except Exception:
         return (
