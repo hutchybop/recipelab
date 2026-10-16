@@ -2,14 +2,14 @@
 
 ## 1) System Overview
 
-RecipeLab is a Flask + MongoDB application for managing a recipe library and generating/refining recipes with LLM support.
+RecipeLab is a Flask + MongoDB application for managing a recipe library and generating recipes with LLM support plus an AI-generated tasting profile lifecycle.
 
 At a high level, it provides:
 
 - **Web UI** for browsing, editing, importing, generating, and exporting recipes.
 - **Responsive + accessible UI layer** (Bootstrap + custom dark theme) with mobile-first navigation/actions, keyboard skip-link support, and focus-visible styling.
 - **API endpoints** for health checks and recipe generation.
-- **Service layer** for LLM orchestration, prompt construction, schema normalization, PDF export, and profile refinement.
+- **Service layer** for LLM orchestration, prompt construction, schema normalization, PDF export, and tasting-profile generation.
 - **Repository layer** for MongoDB persistence and index management.
 - **Recipe content library** under `recipes/` and an import script to ingest markdown recipes.
 - **Tests** with in-memory fakes for route/service/repository behaviors.
@@ -100,7 +100,7 @@ flowchart LR
 | `app/__init__.py` | App factory | Load config, validate required env, init extensions, register blueprints | `create_app()` |
 | `app/config.py` | Runtime configuration | Load `.env`, map env vars to dataclass, validate required keys | `AppConfig` |
 | `app/extensions.py` | Infra wiring | Create MongoClient/DB handles and health probe | `init_extensions()`, `get_mongo_db()`, `mongo_health()` |
-| `app/blueprints/web/routes.py` | Web UI endpoints | Dashboard, recipes, suggestions, generate/import, profile, settings, PDF, feedback flows | `web_bp` + route handlers |
+| `app/blueprints/web/routes.py` | Web UI endpoints | Dashboard, recipes, suggestions, generate/import, profile, settings, PDF, tasting-profile lifecycle | `web_bp` + route handlers |
 | `app/blueprints/api/routes.py` | API endpoints | Health and recipe generation JSON API | `api_bp`, `/health`, `/generate` |
 | `app/blueprints/*/__init__.py` | Package markers | Namespace structure | none |
 
@@ -109,12 +109,12 @@ flowchart LR
 | Path | Purpose | Key responsibilities | Main exports / entrypoints |
 |---|---|---|---|
 | `app/services/__init__.py` | Service facade | Re-export service constants/functions for route imports | `MEAL_TYPES`, generation/profile/PDF/schema APIs |
-| `app/services/generation_service.py` | LLM workflow orchestration | Build prompts, call adapter, persist generation runs + suggestions, resolve model selection | `generate_recipe_suggestion()`, `convert_raw_recipe_to_suggestion()`, `get_allowed_models()`, `get_effective_model()` |
+| `app/services/generation_service.py` | LLM workflow orchestration | Build prompts, call adapter, persist generation runs + suggestions, enforce accepted-profile gate, resolve model selection | `generate_recipe_suggestion()`, `convert_raw_recipe_to_suggestion()`, `get_allowed_models()`, `get_effective_model()` |
 | `app/services/llm_adapter.py` | LLM transport abstraction | OpenAI-compatible/Ollama request handling and response parsing | `LLMAdapter`, `LLMAdapterError` |
-| `app/services/prompt_composer.py` | Prompt construction | Build generation and canonical conversion prompts with constraints/profile context | `compose_recipe_prompt()`, `compose_canonical_conversion_prompt()`, `DEFAULT_HARD_CONSTRAINTS` |
-| `app/services/schema_utils.py` | Domain validation/normalization | Canonicalize recipe/suggestion/preferences/feedback/generation-run docs and enums | `normalize_*` functions, `MEAL_TYPES`, etc. |
+| `app/services/prompt_composer.py` | Prompt construction | Build generation, tasting-profile, and canonical conversion prompts with constraints/context | `compose_recipe_prompt()`, `compose_tasting_profile_prompt()`, `compose_canonical_conversion_prompt()` |
+| `app/services/schema_utils.py` | Domain validation/normalization | Canonicalize recipe/suggestion/preferences/tasting-profile/generation-run docs and enums | `normalize_*` functions, `MEAL_TYPES`, etc. |
 | `app/services/pdf_export_service.py` | PDF export | Build simple one-page PDF bytes and safe filename from recipe data | `render_recipe_pdf()`, `pdf_filename_for_recipe()` |
-| `app/services/profile_refinement_service.py` | Profile learning | Mine feedback tokens, create profile update suggestions, apply/reject updates | `generate_profile_update_suggestions()`, `apply_profile_update_suggestion()`, `reject_profile_update_suggestion()` |
+| `app/services/tasting_profile_service.py` | Tasting profile lifecycle | Generate candidate tasting profiles with provenance + snapshots | `generate_tasting_profile_candidate()` |
 
 ## Repository layer (`app/repositories/`)
 
@@ -127,8 +127,7 @@ flowchart LR
 | `app/repositories/suggestions_repository.py` | `suggestions` collection access | Create/read/list by status/update status/update recipe for review | `SuggestionsRepository` |
 | `app/repositories/generation_runs_repository.py` | `generation_runs` collection access | Track run lifecycle and raw output/errors | `GenerationRunsRepository` |
 | `app/repositories/preferences_repository.py` | `preferences` collection access | Active profile upsert + active profile retrieval | `PreferencesRepository` |
-| `app/repositories/feedback_events_repository.py` | `feedback_events` collection access | Store/list feedback per recipe/suggestion | `FeedbackEventsRepository` |
-| `app/repositories/profile_update_suggestions_repository.py` | `profile_update_suggestions` collection access | Create/list/update suggested profile changes | `ProfileUpdateSuggestionsRepository` |
+| `app/repositories/tasting_profiles_repository.py` | `tasting_profiles` collection access | Candidate/accepted/rejected/superseded lifecycle and active-profile handling | `TastingProfilesRepository` |
 | `app/repositories/runtime_settings_repository.py` | `runtime_settings` collection access | Persist selected generation model | `RuntimeSettingsRepository` |
 
 ## UI / content / scripts / tests
@@ -168,7 +167,7 @@ graph TD
     services --> gen[services/generation_service.py]
     services --> llm[services/llm_adapter.py]
     services --> schema[services/schema_utils.py]
-    services --> profile[services/profile_refinement_service.py]
+    services --> tastingprofile[services/tasting_profile_service.py]
     services --> pdf[services/pdf_export_service.py]
     services --> promptsvc[services/prompt_composer.py]
 
@@ -177,31 +176,28 @@ graph TD
     gen --> promptsvc
     gen --> schema
 
-    profile --> repos
+    tastingprofile --> repos
 
     repos --> idx[repositories/indexes.py]
     repos --> recipesrepo[repositories/recipes_repository.py]
     repos --> suggrepo[repositories/suggestions_repository.py]
     repos --> genrepo[repositories/generation_runs_repository.py]
     repos --> prefrepo[repositories/preferences_repository.py]
-    repos --> feedrepo[repositories/feedback_events_repository.py]
-    repos --> profilerepo[repositories/profile_update_suggestions_repository.py]
+    repos --> tastingrepo[repositories/tasting_profiles_repository.py]
     repos --> runtimerepo[repositories/runtime_settings_repository.py]
 
     recipesrepo --> schema
     suggrepo --> schema
     genrepo --> schema
     prefrepo --> schema
-    feedrepo --> schema
-    profilerepo --> schema
+    tastingrepo --> schema
     runtimerepo --> schema
 
     idx --> recipesrepo
     idx --> suggrepo
     idx --> genrepo
     idx --> prefrepo
-    idx --> feedrepo
-    idx --> profilerepo
+    idx --> tastingrepo
     idx --> runtimerepo
 ```
 
@@ -232,8 +228,8 @@ graph TD
 
 1. User submits meal type/instructions via `/generate` or `POST /api/generate`.
 2. Route validates meal type and calls `generate_recipe_suggestion()`.
-3. Service ensures DB indexes, loads active profile + effective model.
-4. Prompt composed from meal type + profile + user instructions.
+3. Service ensures DB indexes, checks for accepted tasting profile, loads effective model.
+4. Prompt composed from meal type + accepted tasting profile + user instructions + optional reference recipes.
 5. Generation run persisted as `started` in `generation_runs`.
 6. `LLMAdapter` calls configured provider and returns raw text.
 7. Raw text parsed as JSON; recipe normalized via `normalize_recipe_document()`.
@@ -256,13 +252,13 @@ graph TD
 4. Recipe created in `recipes`; suggestion status set to `accepted`.
 5. User redirected to recipe detail page.
 
-### 5.4 Feedback → profile refinement flow
+### 5.4 Tasting profile lifecycle flow
 
-1. Feedback saved in `feedback_events` for `recipe` or `suggestion` targets.
-2. `/profile` refresh action calls `generate_profile_update_suggestions()`.
-3. Service resolves targets, tokenizes tags/ingredients, counts liked/disliked tokens.
-4. Pending profile update suggestions stored in `profile_update_suggestions`.
-5. Apply/reject routes update active `preferences` and suggestion statuses.
+1. User saves `dislikes` + `hard_avoids` at `/profile`.
+2. User generates/regenerates a tasting profile candidate (`generate_tasting_profile_candidate()`).
+3. Service creates `generation_runs` record, calls LLM, validates profile payload, and stores candidate in `tasting_profiles` with provenance/snapshot metadata.
+4. User reviews candidate and accepts or rejects.
+5. Accept marks candidate active and supersedes prior accepted profile.
 
 ---
 
@@ -290,9 +286,9 @@ graph TD
 - **Runtime model settings**
   - `web.settings_page()` ↔ `RuntimeSettingsRepository`; generation uses `get_effective_model()`.
 
-- **Profile refinement**
-  - `web.profile_page(action=refresh_suggestions)` → `generate_profile_update_suggestions()`.
-  - Apply/reject routes call `apply_profile_update_suggestion()` / `reject_profile_update_suggestion()`.
+- **Tasting profile lifecycle**
+  - `web.profile_page(action=generate_tasting_profile|regenerate_tasting_profile)` → `generate_tasting_profile_candidate()`.
+  - Accept/reject routes update `tasting_profiles` status and active profile state.
 
 ---
 
@@ -321,10 +317,11 @@ graph TD
 - Extend provider handling in `app/services/llm_adapter.py` (`generate_recipe()` switch).
 - If provider-specific settings are needed, extend `AppConfig` and `.env.example`.
 
-### 7.5 Extend profile learning
+### 7.5 Extend tasting profile behavior
 
-- Update token extraction/ranking logic in `app/services/profile_refinement_service.py`.
-- Optionally add richer feedback fields via `normalize_feedback_event_document()` and feedback repository.
+- Update candidate generation/validation logic in `app/services/tasting_profile_service.py`.
+- Update prompt strategy in `app/services/prompt_composer.py` (`compose_tasting_profile_prompt`).
+- Keep profile provenance/snapshot fields aligned via `normalize_tasting_profile_document()`.
 
 ### 7.6 Extend import pipeline
 
