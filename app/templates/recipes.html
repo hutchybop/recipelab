@@ -28,15 +28,6 @@
           <div class="d-flex w-100 justify-content-between align-items-start gap-2 flex-wrap">
             <h2 class="h6 mb-1 text-wrap-anywhere flex-grow-1">{{ recipe.get('title', 'Untitled') }}</h2>
             <div class="d-flex flex-wrap gap-1 flex-shrink-0">
-              {% set feedback = feedback_states.get(recipe['_id']|string, {}) %}
-              {% if feedback.get('reaction') == 'liked' %}
-                <span class="badge bg-success">Liked</span>
-              {% elif feedback.get('reaction') == 'disliked' %}
-                <span class="badge bg-danger">Disliked</span>
-              {% endif %}
-              {% if feedback.get('latest_note') %}
-                <span class="badge bg-secondary" title="{{ feedback.get('latest_note') }}">Note</span>
-              {% endif %}
               <span class="badge recipe-source-badge {% if recipe.get('source_type') == 'ai' %}recipe-source-badge--ai{% else %}recipe-source-badge--user{% endif %}">{{ recipe.get('source_type', 'user') }}</span>
             </div>
           </div>

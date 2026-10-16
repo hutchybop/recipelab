@@ -15,9 +15,7 @@ class IndexTests(unittest.TestCase):
         self.assertGreaterEqual(len(db["recipes"].indexes), 5)
         self.assertGreaterEqual(len(db["suggestions"].indexes), 3)
         self.assertGreaterEqual(len(db["preferences"].indexes), 2)
-        self.assertGreaterEqual(len(db["feedback_events"].indexes), 2)
         self.assertGreaterEqual(len(db["generation_runs"].indexes), 3)
-        self.assertGreaterEqual(len(db["profile_update_suggestions"].indexes), 2)
         self.assertGreaterEqual(len(db["runtime_settings"].indexes), 1)
         self.assertGreaterEqual(len(db["tasting_profiles"].indexes), 3)
 

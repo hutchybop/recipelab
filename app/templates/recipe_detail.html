@@ -60,64 +60,6 @@
     </div>
   {% endif %}
 
-  <div class="card border-0 shadow-sm mb-3">
-    <div class="card-body">
-      <h2 class="h5">Feedback</h2>
-      <div class="mb-3">
-        <strong class="d-block mb-1">Current feedback</strong>
-        {% if feedback_state.get('reaction') == 'liked' %}
-          <span class="badge bg-success me-1">Liked</span>
-        {% elif feedback_state.get('reaction') == 'disliked' %}
-          <span class="badge bg-danger me-1">Disliked</span>
-        {% else %}
-          <span class="badge bg-secondary me-1">No like/dislike yet</span>
-        {% endif %}
-        {% if feedback_state.get('latest_note') %}
-          <span class="badge bg-info text-dark">Note saved</span>
-        {% endif %}
-      </div>
-      <form method="post" action="{{ url_for('web.submit_feedback') }}" class="d-flex flex-wrap gap-2 align-items-center">
-        <input type="hidden" name="target_type" value="recipe" />
-        <input type="hidden" name="target_id" value="{{ recipe['_id'] }}" />
-        <input type="hidden" name="return_to" value="{{ request.path }}" />
-        <input class="form-control feedback-note-input w-100" type="text" name="notes" placeholder="Optional note" value="{{ feedback_state.get('latest_note', '') }}" />
-        <button class="btn w-100 w-sm-auto {% if feedback_state.get('reaction') == 'liked' %}btn-success{% else %}btn-outline-success{% endif %}" type="submit" name="signal" value="liked">Liked</button>
-        <button class="btn w-100 w-sm-auto {% if feedback_state.get('reaction') == 'disliked' %}btn-danger{% else %}btn-outline-danger{% endif %}" type="submit" name="signal" value="disliked">Disliked</button>
-        <button class="btn w-100 w-sm-auto {% if feedback_state.get('latest_note') %}btn-secondary{% else %}btn-outline-secondary{% endif %}" type="submit" name="signal" value="note">Add Note</button>
-      </form>
-      <div class="action-row mobile-stack mt-2">
-        <form method="post" action="{{ url_for('web.clear_feedback_reaction') }}">
-          <input type="hidden" name="target_type" value="recipe" />
-          <input type="hidden" name="target_id" value="{{ recipe['_id'] }}" />
-          <input type="hidden" name="return_to" value="{{ request.path }}" />
-          <button class="btn btn-sm btn-outline-secondary" type="submit">Clear Reaction</button>
-        </form>
-        <form method="post" action="{{ url_for('web.clear_feedback_note') }}">
-          <input type="hidden" name="target_type" value="recipe" />
-          <input type="hidden" name="target_id" value="{{ recipe['_id'] }}" />
-          <input type="hidden" name="return_to" value="{{ request.path }}" />
-          <button class="btn btn-sm btn-outline-secondary" type="submit">Delete Note</button>
-        </form>
-      </div>
-
-      <hr />
-      <h3 class="h6">Recent feedback history</h3>
-      {% if feedback_history %}
-        <ul class="mb-0 small">
-          {% for event in feedback_history %}
-            <li>
-              <strong>{{ event.get('signal') }}</strong>
-              {% if event.get('notes') %} — {{ event.get('notes') }}{% endif %}
-              <span class="text-muted">({{ event.get('created_at') }})</span>
-            </li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <p class="text-muted mb-0">No feedback saved yet.</p>
-      {% endif %}
-    </div>
-  </div>
-
   <div class="action-row mobile-stack">
     <a class="btn btn-outline-dark" href="{{ url_for('web.export_recipe_pdf', recipe_id=recipe['_id']) }}">Export PDF</a>
     <a class="btn btn-outline-primary" href="{{ url_for('web.edit_recipe', recipe_id=recipe['_id']) }}">Edit Recipe</a>

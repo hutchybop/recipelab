@@ -16,7 +16,6 @@ from flask import (
 
 from ...extensions import get_mongo_db
 from ...repositories import (
-    FeedbackEventsRepository,
     PreferencesRepository,
     RecipesRepository,
     RuntimeSettingsRepository,
@@ -25,21 +24,14 @@ from ...repositories import (
 )
 from ...services import (
     MEAL_TYPES,
-    apply_profile_update_suggestion,
-    bulk_manage_profile_update_suggestions,
     convert_raw_recipe_to_suggestion,
-    delete_profile_update_suggestion,
-    edit_profile_update_suggestion,
     get_allowed_models,
     get_effective_model,
     generate_recipe_suggestion,
     generate_tasting_profile_candidate,
     normalize_recipe_document,
     pdf_filename_for_recipe,
-    reopen_profile_update_suggestion,
-    reject_profile_update_suggestion,
     render_recipe_pdf,
-    undo_profile_update_suggestion,
 )
 
 
@@ -180,17 +172,7 @@ def suggestion_detail(suggestion_id: str) -> str:
         flash("Suggestion not found.", "warning")
         return redirect(url_for("web.suggestions_page"))
 
-    feedback_repo = FeedbackEventsRepository(db)
-    feedback_history = feedback_repo.list_for_target(
-        target_type="suggestion", target_id=suggestion_id, limit=20
-    )
-    feedback_state = _feedback_state_from_events(feedback_history)
-    return render_template(
-        "suggestion_detail.html",
-        suggestion=suggestion,
-        feedback_state=feedback_state,
-        feedback_history=feedback_history,
-    )
+    return render_template("suggestion_detail.html", suggestion=suggestion)
 
 
 @web_bp.route("/suggestions/<suggestion_id>/edit", methods=["GET", "POST"])
@@ -354,22 +336,9 @@ def recipes_page() -> str:
     recipes = RecipesRepository(db).list(
         meal_type=selected_meal_type or None, limit=300
     )
-    recipe_ids = [str(recipe["_id"]) for recipe in recipes]
-    feedback_by_recipe: dict[str, list[dict]] = {
-        recipe_id: [] for recipe_id in recipe_ids
-    }
-    for event in FeedbackEventsRepository(db).list_for_targets(
-        target_type="recipe", target_ids=recipe_ids
-    ):
-        feedback_by_recipe.setdefault(str(event.get("target_id", "")), []).append(event)
-    feedback_states = {
-        recipe_id: _feedback_state_from_events(events)
-        for recipe_id, events in feedback_by_recipe.items()
-    }
     return render_template(
         "recipes.html",
         recipes=recipes,
-        feedback_states=feedback_states,
         meal_types=sorted(MEAL_TYPES),
         selected_meal_type=selected_meal_type,
     )
@@ -469,18 +438,7 @@ def recipe_detail(recipe_id: str) -> str:
         flash("Recipe not found.", "warning")
         return redirect(url_for("web.recipes_page"))
 
-    feedback_repo = FeedbackEventsRepository(db)
-    feedback_history = feedback_repo.list_for_target(
-        target_type="recipe", target_id=recipe_id, limit=20
-    )
-    feedback_state = _feedback_state_from_events(feedback_history)
-
-    return render_template(
-        "recipe_detail.html",
-        recipe=recipe,
-        feedback_state=feedback_state,
-        feedback_history=feedback_history,
-    )
+    return render_template("recipe_detail.html", recipe=recipe)
 
 
 @web_bp.get("/recipes/<recipe_id>/pdf")
@@ -498,82 +456,6 @@ def export_recipe_pdf(recipe_id: str):
         mimetype="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
-
-@web_bp.post("/feedback")
-def submit_feedback():
-    target_type = str(request.form.get("target_type", "")).strip()
-    target_id = str(request.form.get("target_id", "")).strip()
-    signal = str(request.form.get("signal", "")).strip()
-    notes = str(request.form.get("notes", "")).strip()
-    return_to = str(request.form.get("return_to", "")).strip() or url_for("web.index")
-
-    if target_type not in {"recipe", "suggestion"}:
-        flash("Invalid feedback target.", "danger")
-        return redirect(return_to)
-    if signal not in {"liked", "disliked", "note"}:
-        flash("Invalid feedback signal.", "danger")
-        return redirect(return_to)
-
-    feedback_repo = FeedbackEventsRepository(get_mongo_db())
-    if signal in {"liked", "disliked"}:
-        feedback_repo.delete_reactions_for_target(
-            target_type=target_type,
-            target_id=target_id,
-        )
-
-    feedback_repo.create(
-        {
-            "target_type": target_type,
-            "target_id": target_id,
-            "signal": signal,
-            "notes": notes,
-        }
-    )
-    flash("Feedback saved.", "success")
-    return redirect(return_to)
-
-
-@web_bp.post("/feedback/clear-reaction")
-def clear_feedback_reaction():
-    target_type = str(request.form.get("target_type", "")).strip()
-    target_id = str(request.form.get("target_id", "")).strip()
-    return_to = str(request.form.get("return_to", "")).strip() or url_for("web.index")
-
-    if target_type not in {"recipe", "suggestion"} or not target_id:
-        flash("Invalid feedback target.", "danger")
-        return redirect(return_to)
-
-    deleted = FeedbackEventsRepository(get_mongo_db()).delete_reactions_for_target(
-        target_type=target_type,
-        target_id=target_id,
-    )
-    flash(
-        "Reaction cleared." if deleted else "No reaction to clear.",
-        "info",
-    )
-    return redirect(return_to)
-
-
-@web_bp.post("/feedback/clear-note")
-def clear_feedback_note():
-    target_type = str(request.form.get("target_type", "")).strip()
-    target_id = str(request.form.get("target_id", "")).strip()
-    return_to = str(request.form.get("return_to", "")).strip() or url_for("web.index")
-
-    if target_type not in {"recipe", "suggestion"} or not target_id:
-        flash("Invalid feedback target.", "danger")
-        return redirect(return_to)
-
-    changed = FeedbackEventsRepository(get_mongo_db()).clear_notes_for_target(
-        target_type=target_type,
-        target_id=target_id,
-    )
-    flash(
-        "Note deleted." if changed else "No note to delete.",
-        "info",
-    )
-    return redirect(return_to)
 
 
 @web_bp.route("/profile", methods=["GET", "POST"])
@@ -685,86 +567,6 @@ def reject_tasting_profile(profile_id: str):
         ),
         "info" if rejected else "warning",
     )
-    return redirect(url_for("web.profile_page"))
-
-
-@web_bp.post("/profile/suggestions/<suggestion_id>/apply")
-def apply_profile_suggestion(suggestion_id: str):
-    ok, message = apply_profile_update_suggestion(get_mongo_db(), suggestion_id)
-    flash(message, "success" if ok else "warning")
-    return redirect(url_for("web.profile_page"))
-
-
-@web_bp.post("/profile/suggestions/<suggestion_id>/reject")
-def reject_profile_suggestion(suggestion_id: str):
-    updated = reject_profile_update_suggestion(get_mongo_db(), suggestion_id)
-    flash(
-        "Suggestion rejected." if updated else "Suggestion not found.",
-        "info" if updated else "warning",
-    )
-    return redirect(url_for("web.profile_page"))
-
-
-@web_bp.post("/profile/suggestions/<suggestion_id>/edit")
-def edit_profile_suggestion(suggestion_id: str):
-    ok, message = edit_profile_update_suggestion(
-        get_mongo_db(),
-        suggestion_id,
-        action=str(request.form.get("suggestion_action", "")),
-        token=str(request.form.get("token", "")),
-    )
-    flash(message, "success" if ok else "warning")
-    return redirect(url_for("web.profile_page"))
-
-
-@web_bp.post("/profile/suggestions/bulk")
-def bulk_profile_suggestions():
-    suggestion_ids = request.form.getlist("suggestion_ids")
-    operation = str(request.form.get("bulk_action", "")).strip()
-    if not suggestion_ids:
-        flash("Select at least one suggestion first.", "warning")
-        return redirect(url_for("web.profile_page"))
-
-    if operation not in {"accept", "reject", "reopen", "undo", "delete"}:
-        flash("Choose a valid bulk action.", "warning")
-        return redirect(url_for("web.profile_page"))
-
-    results = bulk_manage_profile_update_suggestions(
-        get_mongo_db(), suggestion_ids, operation=operation
-    )
-    flash(
-        f"Bulk action complete: {results['updated']} updated, "
-        f"{results['deleted']} deleted, {results['skipped']} skipped.",
-        "info",
-    )
-    return redirect(url_for("web.profile_page"))
-
-
-@web_bp.post("/profile/suggestions/<suggestion_id>/undo")
-def undo_profile_suggestion(suggestion_id: str):
-    ok, message = undo_profile_update_suggestion(get_mongo_db(), suggestion_id)
-    flash(message, "info" if ok else "warning")
-    return redirect(url_for("web.profile_page"))
-
-
-@web_bp.post("/profile/suggestions/<suggestion_id>/reopen")
-def reopen_profile_suggestion(suggestion_id: str):
-    updated = reopen_profile_update_suggestion(get_mongo_db(), suggestion_id)
-    flash(
-        (
-            "Suggestion reopened as pending."
-            if updated
-            else "Suggestion cannot be reopened."
-        ),
-        "info" if updated else "warning",
-    )
-    return redirect(url_for("web.profile_page"))
-
-
-@web_bp.post("/profile/suggestions/<suggestion_id>/delete")
-def delete_profile_suggestion(suggestion_id: str):
-    ok, message = delete_profile_update_suggestion(get_mongo_db(), suggestion_id)
-    flash(message, "info" if ok else "warning")
     return redirect(url_for("web.profile_page"))
 
 
@@ -890,33 +692,3 @@ def _merge_available_tags(
     existing_tags: list[str], selected_tags: list[str]
 ) -> list[str]:
     return sorted(set(existing_tags) | set(selected_tags))
-
-
-def _feedback_state_from_events(events: list[dict]) -> dict[str, str]:
-    reaction = ""
-    reaction_at = ""
-    latest_note = ""
-    latest_note_at = ""
-
-    for event in events:
-        signal = str(event.get("signal", ""))
-        notes = str(event.get("notes", "")).strip()
-        created_at = str(event.get("created_at", ""))
-
-        if not reaction and signal in {"liked", "disliked"}:
-            reaction = signal
-            reaction_at = created_at
-
-        if not latest_note and notes:
-            latest_note = notes
-            latest_note_at = created_at
-
-        if reaction and latest_note:
-            break
-
-    return {
-        "reaction": reaction,
-        "reaction_at": reaction_at,
-        "latest_note": latest_note,
-        "latest_note_at": latest_note_at,
-    }
