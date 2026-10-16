@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from app import create_app
+from app.services.llm_adapter import LLMAdapterError
 from app.services.tasting_profile_service import generate_tasting_profile_candidate
 
 from tests.fakes import FakeDatabase
@@ -102,9 +103,32 @@ class TastingProfileServiceTests(unittest.TestCase):
         self.assertEqual(stored["profile"]["explicit_dislikes"], ["mushrooms"])
         self.assertEqual(stored["profile"]["hard_avoids_strict"], ["peanuts"])
         self.assertEqual(stored["profile"]["evidence_summary"]["recipe_count_used"], 1)
+        self.assertEqual(stored["input_snapshot"]["recipe_ids"], ["r1"])
+        self.assertEqual(stored["input_snapshot"]["active_tasting_profile_id"], "")
+        self.assertEqual(stored["llm"]["provider"], "openai_compatible")
+        self.assertEqual(stored["llm"]["model"], "gpt-5.4")
+        self.assertTrue(stored["llm"]["prompt_text"])
+        self.assertTrue(stored["llm"]["raw_response"])
 
         self.assertEqual(len(self.db["generation_runs"].docs), 1)
         self.assertEqual(self.db["generation_runs"].docs[0]["status"], "succeeded")
+
+    @patch("app.services.tasting_profile_service.LLMAdapter.generate_recipe")
+    def test_generate_tasting_profile_candidate_llm_failure_contains_context(
+        self, mock_generate
+    ):
+        mock_generate.side_effect = LLMAdapterError("upstream unavailable")
+
+        with self.app.app_context():
+            result = generate_tasting_profile_candidate(db=self.db)
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["status_code"], 502)
+        self.assertIn("Tasting profile generation failed", result["error"])
+        self.assertIn("openai_compatible", result["error"])
+        self.assertIn("gpt-5.4", result["error"])
+        self.assertEqual(self.db["generation_runs"].docs[0]["status"], "failed")
+        self.assertIn("run_id", result)
 
     @patch("app.services.tasting_profile_service.LLMAdapter.generate_recipe")
     def test_generate_tasting_profile_candidate_invalid_json(self, mock_generate):

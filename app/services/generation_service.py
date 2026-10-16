@@ -61,10 +61,19 @@ def generate_recipe_suggestion(
     api_key = current_app.config.get("LLM_API_KEY", "").strip()
 
     if not provider or not model:
+        missing = []
+        if not provider:
+            missing.append("LLM_PROVIDER")
+        if not model:
+            missing.append("LLM_MODEL or runtime model selection")
         return {
             "ok": False,
             "status_code": 503,
-            "error": "Generation is not configured. Set LLM_PROVIDER and LLM_MODEL in .env.",
+            "error": (
+                "Generation is not configured: missing "
+                + ", ".join(missing)
+                + ". Set provider/model env vars and ensure a valid model is selected in Settings."
+            ),
         }
 
     prompt = compose_recipe_prompt(
@@ -92,11 +101,14 @@ def generate_recipe_suggestion(
     try:
         raw_response = adapter.generate_recipe(prompt)
     except LLMAdapterError as exc:
+        detailed_error = (
+            f"Recipe generation failed for provider '{provider}' model '{model}': {exc}"
+        )
         generation_runs_repository.update_status(run["_id"], "failed", error=str(exc))
         return {
             "ok": False,
             "status_code": 502,
-            "error": str(exc),
+            "error": detailed_error,
             "run_id": str(run["_id"]),
         }
 
@@ -155,10 +167,19 @@ def convert_raw_recipe_to_suggestion(
     api_key = current_app.config.get("LLM_API_KEY", "").strip()
 
     if not provider or not model:
+        missing = []
+        if not provider:
+            missing.append("LLM_PROVIDER")
+        if not model:
+            missing.append("LLM_MODEL or runtime model selection")
         return {
             "ok": False,
             "status_code": 503,
-            "error": "Generation is not configured. Set LLM_PROVIDER and LLM_MODEL in .env.",
+            "error": (
+                "Generation is not configured: missing "
+                + ", ".join(missing)
+                + ". Set provider/model env vars and ensure a valid model is selected in Settings."
+            ),
         }
 
     prompt = compose_canonical_conversion_prompt(
@@ -184,11 +205,14 @@ def convert_raw_recipe_to_suggestion(
     try:
         raw_response = adapter.generate_recipe(prompt)
     except LLMAdapterError as exc:
+        detailed_error = (
+            f"Recipe conversion failed for provider '{provider}' model '{model}': {exc}"
+        )
         generation_runs_repository.update_status(run["_id"], "failed", error=str(exc))
         return {
             "ok": False,
             "status_code": 502,
-            "error": str(exc),
+            "error": detailed_error,
             "run_id": str(run["_id"]),
         }
 

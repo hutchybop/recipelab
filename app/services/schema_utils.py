@@ -398,6 +398,10 @@ def normalize_tasting_profile_document(document: Mapping[str, Any]) -> dict[str,
                 field_name="input_snapshot.recipe_ids",
             ),
             "recipe_count": int(input_snapshot.get("recipe_count", 0) or 0),
+            "active_tasting_profile_id": _clean_string(
+                input_snapshot.get("active_tasting_profile_id", ""),
+                field_name="input_snapshot.active_tasting_profile_id",
+            ),
         },
         "llm": {
             "provider": _clean_string(

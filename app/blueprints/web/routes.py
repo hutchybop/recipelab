@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from flask import (
     Blueprint,
@@ -518,6 +519,15 @@ def profile_page() -> str:
     active_profile = preferences_repo.get_active_profile() or active_profile
     active_tasting_profile = tasting_profiles_repo.get_active_profile()
     latest_candidate = tasting_profiles_repo.get_latest_candidate()
+    current_recipes = RecipesRepository(db).list(limit=5000)
+    stale_profile = _compute_tasting_profile_staleness(
+        active_tasting_profile=active_tasting_profile,
+        current_recipes=current_recipes,
+    )
+    profile_diff_summary = _compute_tasting_profile_diff_summary(
+        active_tasting_profile=active_tasting_profile,
+        latest_candidate=latest_candidate,
+    )
 
     active_tasting_profile_json = (
         json.dumps(
@@ -539,6 +549,8 @@ def profile_page() -> str:
         latest_candidate=latest_candidate,
         active_tasting_profile_json=active_tasting_profile_json,
         latest_candidate_json=latest_candidate_json,
+        stale_profile=stale_profile,
+        profile_diff_summary=profile_diff_summary,
     )
 
 
@@ -692,3 +704,74 @@ def _merge_available_tags(
     existing_tags: list[str], selected_tags: list[str]
 ) -> list[str]:
     return sorted(set(existing_tags) | set(selected_tags))
+
+
+def _compute_tasting_profile_staleness(
+    *,
+    active_tasting_profile: dict | None,
+    current_recipes: list[dict],
+) -> dict[str, Any] | None:
+    if not active_tasting_profile:
+        return None
+
+    input_snapshot = active_tasting_profile.get("input_snapshot", {})
+    if not isinstance(input_snapshot, dict):
+        input_snapshot = {}
+
+    snapshot_ids = {
+        str(item).strip()
+        for item in input_snapshot.get("recipe_ids", [])
+        if isinstance(item, str) and str(item).strip()
+    }
+    current_ids = {
+        str(item.get("_id", "")).strip()
+        for item in current_recipes
+        if str(item.get("_id", "")).strip()
+    }
+
+    if not snapshot_ids:
+        return {
+            "stale": False,
+            "unknown": True,
+            "message": "No recipe snapshot was stored for this accepted profile.",
+            "added": 0,
+            "removed": 0,
+        }
+
+    added_count = len(current_ids - snapshot_ids)
+    removed_count = len(snapshot_ids - current_ids)
+    is_stale = added_count > 0 or removed_count > 0
+
+    return {
+        "stale": is_stale,
+        "unknown": False,
+        "added": added_count,
+        "removed": removed_count,
+        "snapshot_count": len(snapshot_ids),
+        "current_count": len(current_ids),
+    }
+
+
+def _compute_tasting_profile_diff_summary(
+    *,
+    active_tasting_profile: dict | None,
+    latest_candidate: dict | None,
+) -> dict[str, Any] | None:
+    if not active_tasting_profile or not latest_candidate:
+        return None
+
+    active_profile = active_tasting_profile.get("profile", {})
+    candidate_profile = latest_candidate.get("profile", {})
+    if not isinstance(active_profile, dict) or not isinstance(candidate_profile, dict):
+        return None
+
+    keys = sorted(set(active_profile.keys()) | set(candidate_profile.keys()))
+    changed_fields = [
+        key for key in keys if active_profile.get(key) != candidate_profile.get(key)
+    ]
+
+    return {
+        "changed_count": len(changed_fields),
+        "changed_fields": changed_fields[:8],
+        "has_more": len(changed_fields) > 8,
+    }

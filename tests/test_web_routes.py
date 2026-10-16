@@ -215,6 +215,113 @@ class WebRoutesTests(unittest.TestCase):
         self.assertIn(b"Balanced savory", response.data)
 
     @patch("app.blueprints.web.routes.get_mongo_db")
+    def test_profile_page_shows_staleness_warning_for_active_profile(self, mock_db):
+        mock_db.return_value = self.fake_db
+        self.fake_db["preferences"].docs.append(
+            {
+                "_id": "p1",
+                "profile_name": "default",
+                "active": True,
+                "hard_avoids": [],
+                "dislikes": [],
+                "weights": {},
+            }
+        )
+        self.fake_db["recipes"].docs.extend(
+            [
+                {
+                    "_id": "r1",
+                    "title": "R1",
+                    "meal_type": "main",
+                    "created_at": 1,
+                    "deleted_at": None,
+                },
+                {
+                    "_id": "r2",
+                    "title": "R2",
+                    "meal_type": "main",
+                    "created_at": 2,
+                    "deleted_at": None,
+                },
+            ]
+        )
+        self.fake_db["tasting_profiles"].docs.append(
+            {
+                "_id": "tp-active",
+                "status": "accepted",
+                "is_active": True,
+                "profile": {"core_taste_preferences_global": ["Balanced savory"]},
+                "input_snapshot": {"recipe_ids": ["r1"], "recipe_count": 1},
+                "review": {
+                    "decision": "accepted",
+                    "decision_note": "",
+                    "decided_at": 2,
+                },
+                "accepted_at": 2,
+                "created_at": 1,
+            }
+        )
+
+        response = self.client.get("/profile")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"may be stale", response.data)
+        self.assertIn(b"1 recipe(s) added", response.data)
+
+    @patch("app.blueprints.web.routes.get_mongo_db")
+    def test_profile_page_shows_candidate_diff_summary(self, mock_db):
+        mock_db.return_value = self.fake_db
+        self.fake_db["preferences"].docs.append(
+            {
+                "_id": "p1",
+                "profile_name": "default",
+                "active": True,
+                "hard_avoids": [],
+                "dislikes": [],
+                "weights": {},
+            }
+        )
+        self.fake_db["tasting_profiles"].docs.extend(
+            [
+                {
+                    "_id": "tp-active",
+                    "status": "accepted",
+                    "is_active": True,
+                    "profile": {
+                        "core_taste_preferences_global": ["Balanced savory"],
+                        "ingredient_protein_preferences": ["Chicken"],
+                    },
+                    "review": {
+                        "decision": "accepted",
+                        "decision_note": "",
+                        "decided_at": 2,
+                    },
+                    "accepted_at": 2,
+                    "created_at": 1,
+                },
+                {
+                    "_id": "tp-candidate",
+                    "status": "candidate_pending",
+                    "is_active": False,
+                    "profile": {
+                        "core_taste_preferences_global": ["Balanced savory"],
+                        "ingredient_protein_preferences": ["Fish"],
+                    },
+                    "review": {
+                        "decision": "pending",
+                        "decision_note": "",
+                        "decided_at": None,
+                    },
+                    "created_at": 3,
+                },
+            ]
+        )
+
+        response = self.client.get("/profile")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Candidate differs from active profile", response.data)
+        self.assertIn(b"ingredient_protein_preferences", response.data)
+
+    @patch("app.blueprints.web.routes.get_mongo_db")
     def test_profile_page_saves_only_dislikes_and_hard_avoids(self, mock_db):
         mock_db.return_value = self.fake_db
         self.fake_db["preferences"].docs.append(
