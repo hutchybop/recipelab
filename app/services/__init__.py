@@ -20,6 +20,7 @@ from .prompt_composer import (
     DEFAULT_HARD_CONSTRAINTS,
     compose_canonical_conversion_prompt,
     compose_recipe_prompt,
+    compose_tasting_profile_prompt,
 )
 from .schema_utils import (
     FEEDBACK_SIGNALS,
@@ -35,6 +36,7 @@ from .schema_utils import (
     normalize_recipe_update,
     normalize_suggestion_document,
 )
+from .tasting_profile_service import generate_tasting_profile_candidate
 
 __all__ = [
     "DEFAULT_HARD_CONSTRAINTS",
@@ -49,11 +51,13 @@ __all__ = [
     "bulk_manage_profile_update_suggestions",
     "compose_canonical_conversion_prompt",
     "compose_recipe_prompt",
+    "compose_tasting_profile_prompt",
     "convert_raw_recipe_to_suggestion",
     "delete_profile_update_suggestion",
     "edit_profile_update_suggestion",
     "generate_profile_update_suggestions",
     "generate_recipe_suggestion",
+    "generate_tasting_profile_candidate",
     "get_allowed_models",
     "get_effective_model",
     "normalize_feedback_event_document",

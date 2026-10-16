@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Mapping
 
 
@@ -104,4 +105,90 @@ def compose_canonical_conversion_prompt(
         "}\n\n"
         "Raw recipe text to convert:\n"
         f"{raw_recipe_text.strip()}\n"
+    )
+
+
+def compose_tasting_profile_prompt(
+    *,
+    dislikes: list[str],
+    hard_avoids: list[str],
+    current_tasting_profile: Mapping[str, Any] | None,
+    user_recipes: list[Mapping[str, Any]],
+) -> str:
+    dislikes_json = json.dumps(dislikes, ensure_ascii=False)
+    hard_avoids_json = json.dumps(hard_avoids, ensure_ascii=False)
+    current_profile_json = json.dumps(
+        dict(current_tasting_profile) if current_tasting_profile else None,
+        ensure_ascii=False,
+        indent=2,
+    )
+    recipes_json = json.dumps(
+        [dict(item) for item in user_recipes], ensure_ascii=False, indent=2
+    )
+
+    return (
+        "## Persona\n"
+        "You are a food preference analyst and recommender-system designer.\n"
+        "Infer this specific user's tasting profile from their own recipes and metadata, not from generic assumptions.\n"
+        "Be evidence-based, conservative, and explicit about uncertainty.\n\n"
+        "---\n\n"
+        "## Task\n"
+        "Generate exactly one tasting profile JSON object.\n"
+        "Return JSON only. No Markdown, no prose outside JSON.\n\n"
+        "---\n\n"
+        "## Inputs\n\n"
+        "Explicit user inputs:\n"
+        f"- dislikes: {dislikes_json}\n"
+        f"- hard_avoids: {hard_avoids_json}\n\n"
+        "Current accepted tasting profile (if present, else null):\n"
+        f"{current_profile_json}\n\n"
+        "User recipes (structured JSON array):\n"
+        f"{recipes_json}\n\n"
+        "Each recipe may include:\n"
+        "- meal_type\n"
+        "- ingredients\n"
+        "- method\n"
+        "- metadata.servings\n"
+        "- metadata.prep_time\n"
+        "- metadata.cook_time\n"
+        "- metadata.rating (1..10, may be empty)\n"
+        "- metadata.difficulty (1..10, may be empty)\n"
+        "- metadata.tags\n\n"
+        "---\n\n"
+        "## Rules\n"
+        "1. Treat `hard_avoids` as strict constraints.\n"
+        "2. Copy explicit `dislikes` into `explicit_dislikes`.\n"
+        "3. Copy explicit `hard_avoids` into `hard_avoids_strict`.\n"
+        "4. Weight evidence by both rating and frequency when possible.\n"
+        "5. Distinguish strong vs moderate vs weak evidence in wording.\n"
+        "6. If evidence is insufficient, state uncertainty explicitly.\n"
+        "7. Do not invent personal facts not supported by input data.\n"
+        "8. Use concise, concrete statements (no vague phrases like 'likes bold flavors').\n\n"
+        "---\n\n"
+        "## Output schema (return exactly this shape)\n"
+        "{\n"
+        '  "core_taste_preferences_global": ["string"],\n'
+        '  "ingredient_protein_preferences": ["string"],\n'
+        '  "flavour_cuisine_affinities": ["string"],\n'
+        '  "texture_dish_type_preferences": ["string"],\n'
+        '  "cooking_behaviour_constraints": ["string"],\n'
+        '  "meal_context_modifiers": {\n'
+        '    "main": ["string"],\n'
+        '    "lunch_batch": ["string"],\n'
+        '    "lunch_single": ["string"],\n'
+        '    "breakfast": ["string"],\n'
+        '    "dessert": ["string"]\n'
+        "  },\n"
+        '  "explicit_dislikes": ["string"],\n'
+        '  "hard_avoids_strict": ["string"],\n'
+        '  "inferred_avoidance_signals_red_flags": ["string"],\n'
+        '  "ideal_constraints_for_new_suggestions": ["string"],\n'
+        '  "known_uncertainties_data_gaps": ["string"],\n'
+        '  "evidence_summary": {\n'
+        '    "recipe_count_used": 0,\n'
+        '    "high_rating_threshold": 8,\n'
+        '    "low_rating_threshold": 4,\n'
+        '    "notes": "string"\n'
+        "  }\n"
+        "}\n"
     )

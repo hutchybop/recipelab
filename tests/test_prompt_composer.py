@@ -5,6 +5,7 @@ import unittest
 from app.services.prompt_composer import (
     compose_canonical_conversion_prompt,
     compose_recipe_prompt,
+    compose_tasting_profile_prompt,
 )
 
 
@@ -37,6 +38,21 @@ class PromptComposerTests(unittest.TestCase):
         self.assertIn("Tag rules (strict)", prompt)
         self.assertIn("quick, high-protein", prompt)
         self.assertIn("If none fit, return an empty tags list.", prompt)
+
+    def test_compose_tasting_profile_prompt_includes_dynamic_inputs(self):
+        prompt = compose_tasting_profile_prompt(
+            dislikes=["mushrooms"],
+            hard_avoids=["peanuts"],
+            current_tasting_profile=None,
+            user_recipes=[{"title": "Chicken Pilaf", "meal_type": "main"}],
+        )
+
+        self.assertIn('- dislikes: ["mushrooms"]', prompt)
+        self.assertIn('- hard_avoids: ["peanuts"]', prompt)
+        self.assertIn("Current accepted tasting profile", prompt)
+        self.assertIn("null", prompt)
+        self.assertIn('"title": "Chicken Pilaf"', prompt)
+        self.assertIn('"meal_context_modifiers"', prompt)
 
 
 if __name__ == "__main__":
