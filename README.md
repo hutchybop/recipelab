@@ -2,23 +2,23 @@
 
 RecipeLab is an **AI-powered recipe studio**: it helps you turn your existing recipe library and tasting profile into smarter, personalized recipe suggestions.
 
-Import what you already cook, define what you like (and hard avoids), then generate recipes aligned to your preferences.
+Import what you already cook, define dislikes and hard avoids, then generate recipes aligned to your preferences.
 
 ## Why RecipeLab
 
 - **Personalized AI generation** based on your active tasting profile
 - **Library-first workflow**: keep and improve your own recipe collection
-- **Feedback loop**: likes/dislikes on recipes and suggestions can drive profile refinements
+- **Profile lifecycle**: generate, review, and accept AI tasting profile candidates
 - **Practical output**: normalized ingredients + clear methods, ready to save/edit/export
 
 ## Features
 
 - Recipe dashboard and browser (`/`, `/recipes`)
-- Recipe CRUD flows (view, edit, soft-delete)
+- Recipe CRUD flows (view, edit, delete)
 - AI suggestion generation (`/generate`, `POST /api/generate`) with profile-aware prompts
 - Raw recipe conversion/import flow (`/import`)
 - Suggestion review workflow (draft / draft_invalid / accepted / rejected)
-- Profile preferences and profile update suggestions (`/profile`)
+- Tasting profile workflow (`/profile`): save inputs, generate/regenerate candidate, accept/reject
 - Runtime model selection (`/settings`)
 - PDF export for recipes (`/recipes/<id>/pdf`)
 - Responsive web UI for phone/tablet/laptop/desktop screen sizes
@@ -96,7 +96,7 @@ LLM_ALLOWED_MODELS=gpt-5.4,deepseek-v4.1-flash
 Then:
 
 1. Start the app and open `/settings` to confirm/select the runtime model.
-2. Open `/profile` and set likes, dislikes, hard avoids, and notes.
+2. Open `/profile` and set dislikes + hard avoids, then generate and accept a tasting profile candidate.
 3. (Optional) Import your recipe markdown library into MongoDB so your collection is in-app:
 
    ```bash
@@ -107,8 +107,8 @@ Then:
 
 > Notes:
 >
-> - Generation uses your **active tasting profile** + instructions.
-> - Your recipe library, suggestions, and feedback history support ongoing refinement workflows in-app.
+> - Generation requires an **accepted tasting profile**.
+> - Optional `reference_recipe_ids` (up to 4) can be passed from UI/API as style/taste anchors.
 
 ## Run Locally
 
@@ -137,6 +137,8 @@ curl -i http://localhost:3009/api/health
 
 Quick AI check:
 
+> Requires an accepted tasting profile; otherwise this returns `409`.
+
 ```bash
 curl -i http://localhost:3009/api/generate \
   -H "Content-Type: application/json" \
@@ -157,7 +159,8 @@ Request:
 {
   "meal_type": "main",
   "instructions": "high-protein dinner",
-  "model": "optional-model-override"
+  "model": "optional-model-override",
+  "reference_recipe_ids": ["optional_recipe_id_1", "optional_recipe_id_2"]
 }
 ```
 
@@ -174,6 +177,8 @@ Response:
 - `201` for valid draft suggestion
 - `422` for `draft_invalid`
 - `400` for invalid meal type
+- `409` when no accepted tasting profile exists
+- `502` when LLM provider/model generation fails
 - `503` if backend/database is unavailable
 
 ## Import Existing Markdown Recipes

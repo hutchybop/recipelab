@@ -1,3 +1,19 @@
+## Session 22
+### Friday October 16th
+<br>
+
+**Summary:** This session removed legacy profile-refinement repositories, services, schema helpers, and related tests to align the codebase with the current tasting-profile workflow. It also refreshed project docs and logged prior session activity to keep development references up to date.
+
+**Git Branch:** main <br>
+**Git commits:** <br>
+3b91243, 98f373c
+
+**Session git history:**
+- remove legacy code 20261016-2306 - *Removed obsolete profile-refinement repositories/services/schema utilities, updated prompt composer integration, and deleted legacy test coverage tied to the retired flow.*
+- update docs 20261016-2241 - *Updated `docs/AGENTS.md` and appended the prior development session details to `docs/DEVELOPMENT_LOG.md`.*
+---
+<br>
+
 ## Session 21
 ### Friday October 16th
 <br>
